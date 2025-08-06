@@ -2,6 +2,9 @@
 import getpass
 import os
 
+# Data management imports
+import pandas as pd
+
 # MLFlow imports
 import mlflow
 

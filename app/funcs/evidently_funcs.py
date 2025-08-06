@@ -1,5 +1,6 @@
 # Data management imports
 import pandas as pd
+import numpy as np
 
 # Evidently imports
 from evidently import DataDefinition

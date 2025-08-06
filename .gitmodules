@@ -1,0 +1,3 @@
+[submodule "cadenza-analytics-python"]
+	path = cadenza-analytics-python
+	url = https://github.com/DisyInformationssysteme/cadenza-analytics-python.git
