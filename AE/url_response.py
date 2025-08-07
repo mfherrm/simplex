@@ -1,4 +1,4 @@
-from app.funcs.extension_data_response import ExtensionDataResponse
+from AE.extension_data_response import ExtensionDataResponse
 
 
 class UrlResponse(ExtensionDataResponse):

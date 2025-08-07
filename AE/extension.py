@@ -1,6 +1,6 @@
 import cadenzaanalytics as ca
 import os
-from app.funcs.url_response import UrlResponse
+from AE.url_response import UrlResponse
 
 # Umgebungsvariable:
 
