@@ -19,69 +19,83 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data: pd.DataFrame):
     Sends two dataframes to the Flask service to calculate data drift
     and returns a URL to the drift report.
     """
-
     # Get newdata ID column name(s)
-    newdata_id_column_name = []
+    newdata_id_column_name, newdata_id_column_print_name = [], []
     try:
         newdata_id = metadata.get_columns_by_attribute_group()['newdata_id']
         if newdata_id:
             newdata_id_column_name = [c.name for c in newdata_id]
+            newdata_id_column_print_name = [c.print_name for c in newdata_id]
     except:
         pass
     # Get newdata column names
     newdata_column_names = [c.name for c in metadata.get_columns_by_attribute_group()['newdata']]
+    newdata_column_print_names = [c.print_name for c in metadata.get_columns_by_attribute_group()['newdata']]
 
     # Get newdata datetime column names
-    newdata_datetime_column_names = []
+    newdata_datetime_column_names, newdata_datetime_column_print_names = [], []
     try:
         newdata_date = metadata.get_columns_by_attribute_group()['newdata_date']
         if newdata_date:
             newdata_datetime_column_names = [c.name for c in newdata_date]
+            newdata_datetime_column_print_names = [c.print_name for c in newdata_date]
     except:
         pass
 
     # Get Training data ID column name
-    refdata_id_column_name = []
+    refdata_id_column_name, refdata_id_column_print_name = [], []
     try:
         refdata_id = metadata.get_columns_by_attribute_group()['refdata_id']
         if refdata_id:
             refdata_id_column_name = [c.name for c in refdata_id]
+            refdata_id_column_print_name = [c.print_name for c in refdata_id]
+            
     except:
         pass
 
     # Get Training data column names
     refdata_column_names = [c.name for c in metadata.get_columns_by_attribute_group()['refdata']]
+    refdata_column_print_names = [c.print_name for c in metadata.get_columns_by_attribute_group()['refdata']]
 
     # Get Training data datetime column names
-    refdata_datetime_column_names = []
+    refdata_datetime_column_names, refdata_datetime_column_print_names = [], []
     try:
         refdata_date = metadata.get_columns_by_attribute_group()['refdata_date']
         if refdata_date:
             refdata_datetime_column_names = [c.name for c in refdata_date]
+            refdata_datetime_column_print_names = [c.print_name for c in refdata_date]
     except:
         pass
     
     # Separate the combined dataframe into the two original dataframes
     # based on the attribute groups defined below.
     new_data_cols = newdata_id_column_name + newdata_column_names + newdata_datetime_column_names
-    new_data = data[new_data_cols]
+    new_data_print_cols = newdata_id_column_print_name + newdata_column_print_names + newdata_datetime_column_print_names
+    new_data = data.copy()[new_data_cols]
+
+    rename_dict = dict(zip(new_data_cols, new_data_print_cols))
+    new_data.rename(columns=rename_dict, inplace=True)
 
     ref_data_cols = refdata_id_column_name + refdata_column_names + refdata_datetime_column_names
-    ref_data = data[ref_data_cols]
+    ref_data_print_cols = refdata_id_column_print_name + refdata_column_print_names + refdata_datetime_column_print_names
+    ref_data = data.copy()[ref_data_cols]
+
+    rename_dict = dict(zip(ref_data_cols, ref_data_print_cols))
+    ref_data.rename(columns=rename_dict, inplace=True)
     
     # Prepare the data for the POST request
     payload = {
         "reference_data": {
             "data": ref_data.to_json(orient='split'),
-            "id_column": refdata_id_column_name,
+            "id_column": refdata_id_column_print_name,
             # "numerical_columns": refdata_column_names,
-            "datetime_columns": refdata_datetime_column_names
+            "datetime_columns": refdata_datetime_column_print_names
         },
         "current_data": {
             "data": new_data.to_json(orient='split'),
-            "id_column": newdata_id_column_name,
+            "id_column": newdata_id_column_print_name,
             # "numerical_columns": newdata_column_names,
-            "datetime_columns": newdata_datetime_column_names
+            "datetime_columns": newdata_datetime_column_print_names
         }
     }
     headers = {'Content-Type': 'application/json'}
