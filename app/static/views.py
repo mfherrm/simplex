@@ -11,6 +11,7 @@ from app.funcs import mlflow_funcs as mf
 
 # Data management imports
 import pandas as pd
+import orjson
 
 # ML imports
 from sklearn.model_selection import train_test_split
@@ -33,7 +34,7 @@ def data_drift():
     Receives two dataframes, computes a data drift report, saves it,
     and returns a success message.
     """
-    data = request.get_json()
+    data = orjson.loads(request.get_data(cache=True))
     if not data:
         return jsonify({"error": "Invalid or empty JSON payload"}), 400
 
@@ -66,7 +67,7 @@ def data_drift():
          # --- Process New Data ---
         new_df = pd.read_json(StringIO(new_payload['data']), orient='split')
         new_df.columns = new_df.columns.astype(str)
-        new_df.to_csv("newdf.csv", index=False)
+        # new_df.to_csv("newdf.csv", index=False)
         try:
             new_id_col = new_payload['id_column'][0]
         except:
@@ -78,7 +79,7 @@ def data_drift():
         ref_df = pd.read_json(StringIO(ref_payload['data']), orient='split')
         ref_df.columns = ref_df.columns.astype(str)
 
-        ref_df.to_csv("refdf.csv", index=False)
+        # ref_df.to_csv("refdf.csv", index=False)
         try:
             ref_id_col = ref_payload['id_column'][0]
         except:

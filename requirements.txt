@@ -3,3 +3,4 @@ pandas
 evidently
 scikit-learn
 mlflow
+orjson
