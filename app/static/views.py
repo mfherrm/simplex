@@ -3,6 +3,7 @@ from io import StringIO
 
 # Control imports
 import os
+import hashlib
 
 # custom funcs
 from app.funcs import evidently_funcs as ef
@@ -21,6 +22,8 @@ from evidently import Report
 
 bp = Blueprint('main', __name__)
 
+REPORT_DIR = 'app/reports'
+
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST'),
 urlpart = f"{WEBSERVICE_HOST}"
 
@@ -31,6 +34,8 @@ def data_drift():
     and returns a success message.
     """
     data = request.get_json()
+    if not data:
+        return jsonify({"error": "Invalid or empty JSON payload"}), 400
 
     print(data)
 
@@ -41,6 +46,22 @@ def data_drift():
 
         if not ref_payload or not new_payload:
             return jsonify({"error": "Missing reference_data or current_data"}), 400
+        
+        combined_payload = pd.read_json(StringIO(ref_payload['data']), orient='split').to_json(orient='records') + \
+                           pd.read_json(StringIO(new_payload['data']), orient='split').to_json(orient='records')
+        
+        # Hash combined payload
+        data_hash = hashlib.sha256(combined_payload.encode('utf-8')).hexdigest()
+        report_filename = f'{data_hash}.html'
+        report_path = os.path.join(REPORT_DIR, report_filename)
+
+        # Check if a report with this hash already exists
+        if os.path.exists(report_path):
+            print(f"Report for hash {data_hash} found in cache. Serving existing file.")
+            report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
+            return jsonify({'report_url': report_url}), 200
+        else:
+            print(f"Report for hash {data_hash} not found. Generating new report.")
 
          # --- Process New Data ---
         new_df = pd.read_json(StringIO(new_payload['data']), orient='split')
@@ -88,18 +109,19 @@ def data_drift():
         reps = report.run(ref_dataset, new_dataset)
         
         # Save the report to a file
-        reps.save_html('app/templates/report.html')
+        reps.save_html(report_path)
 
-        return jsonify({"message": "Report generated successfully"})
+        report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
+        return jsonify({'report_url': report_url}), 200
     except Exception as e:
         print(f"An error occurred: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-@bp.route('/app/view_report', methods=['GET'])
-def view_report():
+@bp.route('/app/view_report/<path:filename>', methods=['GET'])
+def view_report(filename):
     """
     Renders the previously generated data drift report.
     """
-    return send_from_directory(os.path.abspath('app/templates'), 'report.html')
+    return send_from_directory(os.path.abspath(REPORT_DIR), filename)

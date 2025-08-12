@@ -112,9 +112,13 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data: pd.DataFrame):
         # For now, we'll return a simple error message to the user
         return UrlResponse(f"data:text/plain,Error generating report: {e}")
 
+    response_data = response.json()
+    # Return the URL to view the generated report
+    report_url = response_data.get("report_url")
+    print(report_url.split(")"))
 
     # Return the URL to view the generated report
-    report_url = f"{URL_PART}/app/view_report"
+    report_url = f"{URL_PART}"+report_url.split(")")[1]
     return UrlResponse(report_url)
 
 # New dataset ID column
@@ -166,8 +170,6 @@ ref_attribute_group_date = ca.AttributeGroup(
     print_name="Training Data Datetime Column(s)",
     data_types=[ca.DataType.ZONEDDATETIME],
 )
-
-
 
 data_drift_extension = ca.CadenzaAnalyticsExtension(
     relative_path="data-drift-extension", 
