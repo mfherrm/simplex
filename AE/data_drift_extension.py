@@ -1,56 +1,74 @@
 import sys
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # Control imports
-import pandas as pd
 import requests
 import json
 import time
 
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-import numpy as np
+# Clustering imports
+from dask_ml.preprocessing import StandardScaler
+from dask_ml.cluster import KMeans
+from dask.distributed import wait
 
-# disy Cadenza
+# Data processing imports
+import pandas as pd
+import dask as dd
+from dask.distributed import Client
+import numpy as np
+import graphviz
+# Set Graphviz executable path
+os.environ["PATH"] += os.pathsep + r"C:\Program Files\Graphviz\bin"
+
+
+
+# disy Cadenza imports
 import cadenzaanalytics as ca
 from AE.url_response import UrlResponse
-
-
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
 
-def get_clustering_samples(df:pd.DataFrame, n_clusters:int=5, samples_per_cluster:int=10):
-    # Handle non-numeric columns
-    numeric_df = df.select_dtypes(include=[np.number])
-    
-    # Drop rows with any NaN values and store the result
-    cleaned_numeric_df = numeric_df.dropna()
-    
-    # Check if there's any data left to cluster
-    if cleaned_numeric_df.empty:
-        # Return an empty DataFrame, or handle this case as appropriate
-        # depending on what you want to do with a dataset that's all NaNs.
-        return pd.DataFrame() 
+def sample_partition(pdf, samples_per_cluster: float = 0.25, random_state = 17):
+    return pdf.groupby("cluster", group_keys=False).apply(
+        lambda x: x.sample(frac=samples_per_cluster, random_state=random_state)
+)
 
-    # Standardize the data
+def get_clustering_samples(df: dd.dataframe.DataFrame, n_clusters: int = 5, random_state = 17):
+
+    # Select numeric columns and ensure consistent dtype
+    numeric_df = df.select_dtypes(include=[np.number]).astype("float64").dropna()
+
+    # Handle case where no usable columns remain
+    n_rows = numeric_df.shape[0].compute()
+    n_cols = len(numeric_df.columns)
+    if n_rows == 0 or n_cols == 0:
+        return df.head(0)
+
+    # Convert to Dask array and standardize
+    X = numeric_df.to_dask_array(lengths=True)
     scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(cleaned_numeric_df)
-    
-    # Perform clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    cluster_labels = kmeans.fit_predict(scaled_data)
+    X_scaled = scaler.fit_transform(X)
 
-    # Add the cluster labels to the cleaned DataFrame, not the original
-    cleaned_numeric_df['cluster'] = cluster_labels
-    
-    # Sample from each cluster from the cleaned DataFrame
-    sampled_df = cleaned_numeric_df.groupby('cluster').apply(
-        lambda x: x.sample(min(len(x), samples_per_cluster))
-    )
-    
-    # Clean up the resulting DataFrame
-    return sampled_df.drop('cluster', axis=1).reset_index(level=0, drop=True)
+    # Perform clustering
+    kmeans = KMeans(n_clusters=n_clusters, init="k-means||", random_state=random_state)
+    kmeans.fit(X_scaled)
+    labels_da = kmeans.predict(X_scaled).persist()
+    wait(labels_da)
+
+    # Reattach labels to original cleaned Dask DataFrame
+    cluster_series = dd.dataframe.from_dask_array(labels_da, index=numeric_df.index, columns="cluster")
+
+    # Sample from each cluster
+    clustered_df = numeric_df.assign(cluster=cluster_series)
+
+    sampled_df = clustered_df.map_partitions(sample_partition, meta=clustered_df._meta)
+
+    return sampled_df.drop("cluster", axis=1).reset_index(drop=True)
+
+
 def get_column_names(attribute_groups: dict, group:str):
     """
     Returns column names and column print names for specified group.
@@ -62,7 +80,41 @@ def get_column_names(attribute_groups: dict, group:str):
         print("Column type not given")
         return [], []
 
-def calculate_data_drift(metadata: ca.RequestMetadata, data: pd.DataFrame):
+def process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_data_print_cols, npartitions=4):
+    # Initialize Dask client
+    with Client() as client:
+        # Convert to Dask DataFrame
+        data.dropna(inplace=True)
+        dask_df = dd.dataframe.from_pandas(data, npartitions=npartitions)
+        
+        # Process new data
+        rename_dict_new = dict(zip(new_data_cols, new_data_print_cols))
+        new_data = dask_df[new_data_cols].rename(columns=rename_dict_new)
+        # Explicitly compute to materialize the result and break dependency chains
+        new_data = dd.dataframe.from_pandas(data=new_data.compute(),npartitions=npartitions)
+        
+        # Process reference data with a separate operation
+        rename_dict_ref = dict(zip(ref_data_cols, ref_data_print_cols))
+        ref_data = dask_df[ref_data_cols].rename(columns=rename_dict_ref)
+        # Explicitly compute to materialize the result and break dependency chains
+        ref_data = dd.dataframe.from_pandas(data=ref_data.compute(),npartitions=npartitions)
+
+        ref_data.visualize(tasks=True, filename='ref.svg')
+
+        # Cluster separately
+        new_data = get_clustering_samples(new_data)
+        ref_data = get_clustering_samples(ref_data)
+        
+        # Ensure computation is complete before exiting the client context
+        new_data = new_data.persist()
+        ref_data = ref_data.persist()
+        wait(new_data)
+        wait(ref_data)
+    
+    return new_data, ref_data
+
+
+def calculate_data_drift(metadata: ca.RequestMetadata, data: dd.dataframe):
     """
     Sends two dataframes to the Flask service to calculate data drift
     and returns a URL to the drift report.
@@ -105,35 +157,37 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data: pd.DataFrame):
     new_data_cols = newdata_id_column_name + newdata_column_names + newdata_datetime_column_names
     new_data_print_cols = newdata_id_column_print_name + newdata_column_print_names + newdata_datetime_column_print_names
 
-    rename_dict = dict(zip(new_data_cols, new_data_print_cols))
-    new_data=data[new_data_cols].rename(columns=rename_dict)
-    new_data = get_clustering_samples(new_data, n_clusters=10, samples_per_cluster=300)
-
     ref_data_cols = refdata_id_column_name + refdata_column_names + refdata_datetime_column_names
     ref_data_print_cols = refdata_id_column_print_name + refdata_column_print_names + refdata_datetime_column_print_names
 
-    rename_dict = dict(zip(ref_data_cols, ref_data_print_cols))
-    ref_data= data[ref_data_cols].rename(columns=rename_dict)
-    ref_data = get_clustering_samples(ref_data, n_clusters=10, samples_per_cluster=300)
+    try:
+        new_data, ref_data = process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_data_print_cols, npartitions=4)
+        
+        t5 = time.time()
+        print("t5: ", t5-t4)
     
-    t5 = time.time()
-    print("t5: ", t5-t4)
-
-    # Prepare the data for the POST request
-    payload = {
-        "reference_data": {
-            "data": ref_data.to_json(orient='split'),
-            "id_column": refdata_id_column_print_name,
-            # "numerical_columns": refdata_column_names,
-            "datetime_columns": refdata_datetime_column_print_names
-        },
-        "current_data": {
-            "data": new_data.to_json(orient='split'),
-            "id_column": newdata_id_column_print_name,
-            # "numerical_columns": newdata_column_names,
-            "datetime_columns": newdata_datetime_column_print_names
+        # Compute DataFrames once and store results to avoid recomputation
+        ref_data_computed = ref_data.compute()
+        new_data_computed = new_data.compute()
+        
+        # Prepare the data for the POST request
+        payload = {
+            "reference_data": {
+                "data": ref_data_computed.to_json(orient='split'),
+                "id_column": refdata_id_column_print_name,
+                # "numerical_columns": refdata_column_names,
+                "datetime_columns": refdata_datetime_column_print_names
+            },
+            "current_data": {
+                "data": new_data_computed.to_json(orient='split'),
+                "id_column": newdata_id_column_print_name,
+                # "numerical_columns": newdata_column_names,
+                "datetime_columns": newdata_datetime_column_print_names
+            }
         }
-    }
+    except Exception as e:
+        print(f"Error processing data: {e}")
+        return UrlResponse(f"data:text/plain,Error processing data: {e}")
     headers = {'Content-Type': 'application/json'}
 
     t6 = time.time()
@@ -217,7 +271,8 @@ params = ca.Parameter(
     name="sampling",
     print_name ="Use clustering sampling?",
     parameter_type="BOOLEAN",
-    required = True,	
+    required = True,
+    options = [True, False],	
     default_value= False
 ) 
 
@@ -236,3 +291,4 @@ analytics_service.add_analytics_extension(data_drift_extension)
 
 if __name__ == '__main__':
     analytics_service.run_development_server(5005)
+
