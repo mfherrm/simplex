@@ -34,11 +34,25 @@ def data_drift():
     Receives two dataframes, computes a data drift report, saves it,
     and returns a success message.
     """
-    data = orjson.loads(request.get_data(cache=True))
+    bytes = request.get_data(cache=True)
+
+    # Hash the input data
+    data_hash = hashlib.sha256(bytes).hexdigest()
+    report_filename = f'{data_hash}.html'
+    report_path = os.path.join(REPORT_DIR, report_filename)
+
+    # Check if a report with this hash already exists
+    if os.path.exists(report_path):
+        print(f"Report for hash {data_hash} found in cache. Serving existing file.")
+        report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
+        return jsonify({'report_url': report_url}), 200
+    else:
+        print(f"Report for hash {data_hash} not found. Generating new report.")
+
+    # Get data
+    data = orjson.loads(bytes)
     if not data:
         return jsonify({"error": "Invalid or empty JSON payload"}), 400
-
-    print(data)
 
     try:
         # Unpack payload
@@ -48,26 +62,12 @@ def data_drift():
         if not ref_payload or not new_payload:
             return jsonify({"error": "Missing reference_data or current_data"}), 400
         
-        combined_payload = pd.read_json(StringIO(ref_payload['data']), orient='split').to_json(orient='records') + \
-                           pd.read_json(StringIO(new_payload['data']), orient='split').to_json(orient='records')
-        
-        # Hash combined payload
-        data_hash = hashlib.sha256(combined_payload.encode('utf-8')).hexdigest()
-        report_filename = f'{data_hash}.html'
-        report_path = os.path.join(REPORT_DIR, report_filename)
+        ref_df = pd.DataFrame(**ref_payload['data'])
+        new_df = pd.DataFrame(**new_payload['data'])
 
-        # Check if a report with this hash already exists
-        if os.path.exists(report_path):
-            print(f"Report for hash {data_hash} found in cache. Serving existing file.")
-            report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
-            return jsonify({'report_url': report_url}), 200
-        else:
-            print(f"Report for hash {data_hash} not found. Generating new report.")
-
-         # --- Process New Data ---
-        new_df = pd.read_json(StringIO(new_payload['data']), orient='split')
+         # Process New Data
         new_df.columns = new_df.columns.astype(str)
-        # new_df.to_csv("newdf.csv", index=False)
+        
         try:
             new_id_col = new_payload['id_column'][0]
         except:
@@ -75,11 +75,9 @@ def data_drift():
 
         new_dt_cols = new_payload['datetime_columns']
 
-        # --- Process Reference Data ---
-        ref_df = pd.read_json(StringIO(ref_payload['data']), orient='split')
+        # Process Reference Data
         ref_df.columns = ref_df.columns.astype(str)
 
-        # ref_df.to_csv("refdf.csv", index=False)
         try:
             ref_id_col = ref_payload['id_column'][0]
         except:
@@ -93,7 +91,6 @@ def data_drift():
             new_df.insert(0, new_id_col, new_df.pop(new_id_col))
             ref_df.insert(0, ref_id_col, ref_df.pop(ref_id_col))
         
-
         # Rename the columns
         rename_dict = dict(zip(ref_df.columns[:], new_df.columns[:]))
         ref_df.rename(columns=rename_dict, inplace=True)
