@@ -8,6 +8,7 @@ import requests
 import json
 import time
 import orjson
+from flask import jsonify
 
 # Clustering imports
 from dask_ml.preprocessing import StandardScaler
@@ -131,6 +132,7 @@ def get_column_names(attribute_groups: dict, group:str):
     """
     try:
         columns = attribute_groups[group]
+        print(c.print_name for c in columns)
         return [c.name for c in columns], [c.print_name for c in columns]
     except:
         print("Column type not given")
@@ -143,28 +145,34 @@ def process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_da
         with Client(cluster) as client:
             print(f"Dask dashboard available at: {client.dashboard_link}")
             
-            # Convert to Dask DataFrame
+            # Handle data preprocessing with pandas directly to avoid large graph warnings
             data.dropna(inplace=True)
-            dask_df = dd.dataframe.from_pandas(data, npartitions=npartitions)
-            print(f"Created Dask DataFrame with {npartitions} partitions")
-
-            # Process new data and compute immediately
+            
+            # Process new data with pandas directly
             rename_dict_new = dict(zip(new_data_cols, new_data_print_cols))
-            new_data = dask_df[new_data_cols].rename(columns=rename_dict_new).compute()
-            print("New data computed")
+            new_data = data[new_data_cols].rename(columns=rename_dict_new)
+            print("New data processed")
 
-            # new_data.to_parquet("nd.parquet")
-
-            # Process reference data and compute immediately
+            # Process reference data with pandas directly
             rename_dict_ref = dict(zip(ref_data_cols, ref_data_print_cols))
-            ref_data = dask_df[ref_data_cols].rename(columns=rename_dict_ref).compute()
-            print("Reference data computed")
+            ref_data = data[ref_data_cols].rename(columns=rename_dict_ref)
+            print("Reference data processed")
 
-            # ref_data.to_parquet("rd.parquet")
-
-            # Now use pandas-based clustering on the computed DataFrames
-            new_data = get_clustering_samples(new_data, n_clusters=5)
-            ref_data = get_clustering_samples(ref_data, n_clusters=5)
+            # Only use Dask for the clustering operation if needed
+            # Convert to Dask only if the dataset is large enough to benefit from parallelization
+            if len(data) > 100000:  # Only use Dask for large datasets
+                # Use client.scatter to efficiently distribute data
+                new_data_future = client.scatter(new_data)
+                ref_data_future = client.scatter(ref_data)
+                
+                # Process with Dask
+                new_data = client.submit(get_clustering_samples, new_data_future, n_clusters=5).result()
+                ref_data = client.submit(get_clustering_samples, ref_data_future, n_clusters=5).result()
+            else:
+                # For smaller datasets, use pandas directly
+                new_data = get_clustering_samples(new_data, n_clusters=5)
+                ref_data = get_clustering_samples(ref_data, n_clusters=5)
+                
             print("Clustering complete")
     
     return new_data, ref_data
@@ -175,8 +183,12 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     Sends two dataframes to the Flask service to calculate data drift
     and returns a URL to the drift report.
     """
+
+    report_url = None
+    
     t0 = time.time()
     attribute_groups = metadata.get_columns_by_attribute_group()
+    print(attribute_groups)
     
     # Get newdata ID column name(s)
     newdata_id_column_name, newdata_id_column_print_name = get_column_names(attribute_groups, "newdata_id")
@@ -215,6 +227,19 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     ref_data_cols = refdata_id_column_name + refdata_column_names + refdata_datetime_column_names
     ref_data_print_cols = refdata_id_column_print_name + refdata_column_print_names + refdata_datetime_column_print_names
 
+    print(newdata_column_print_names)
+
+    print(ref_data_print_cols)
+
+    print("\n", new_data_print_cols)
+    # Fetch last report if there is an uneven number of columns
+    if (len(new_data_print_cols) != len(ref_data_print_cols)):
+        if analytics_service.last_url != None:
+            return UrlResponse(analytics_service.last_url)
+        else:
+            print("Meesa not happy")
+            return ca.ErrorResponse(f"Error: Uneven number of columns between new data and reference data")
+    
     try:
         new_data, ref_data = process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_data_print_cols, npartitions=4)
         
@@ -238,7 +263,8 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
         }
     except Exception as e:
         print(f"Error processing data: {e}")
-        return UrlResponse(f"data:text/plain,Error processing data: {e}")
+        return ca.ErrorResponse(f"Error processing data: {e}")
+    
     headers = {'Content-Type': 'application/json'}
 
     t6 = time.time()
@@ -248,14 +274,10 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
 
     try:
         response = requests.post(f"{URL_PART}/app/data_drift", data=orjson.dumps(payload, option=orjson.OPT_NAIVE_UTC | orjson.OPT_SERIALIZE_NUMPY), headers=headers)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status() 
     except requests.exceptions.RequestException as e:
-        # Handle connection errors or bad responses
-        # In a real application, you'd want to log this error
-        # and potentially return an error response to the user.
         print(f"Error calling data drift service: {e}")
-        # For now, we'll return a simple error message to the user
-        return UrlResponse(f"data:text/plain,Error generating report: {e}")
+        return ca.ErrorResponse(f"Error generating report: {e}")
     
     t7 = time.time()
     print("t7: ", t7-t6)
@@ -267,6 +289,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
 
     # Return the URL to view the generated report
     report_url = f"{URL_PART}"+report_url.split(")")[1]
+    analytics_service.last_url = report_url
     return UrlResponse(report_url)
 
 # New dataset ID column
@@ -334,6 +357,7 @@ MEGABYTE = (2 ** 10) ** 2
 analytics_service._app.config['MAX_CONTENT_LENGTH'] = None
 analytics_service._app.config['MAX_FORM_PARTS'] = 500000
 analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = 500 * MEGABYTE
+analytics_service.last_url = None
 
 if __name__ == '__main__':
     analytics_service.run_development_server(5005)
