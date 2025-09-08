@@ -16,6 +16,8 @@ COPY . .
 EXPOSE 5000
 
 # Set environment variables for Flask
+ENV PYTHONUNBUFFERED=1
 
 # Run the application with Gunicorn (production WSGI server)
-CMD ["python", "run.py"]
+# Run with unbuffered output so print statements appear in logs immediately
+CMD ["python", "-u", "run.py"]

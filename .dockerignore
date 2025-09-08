@@ -7,12 +7,16 @@ Cadenza-10.2.171-dist-win.zip
 /AE
 
 # Jupyter notebooks
+/Notebooks
 conversion.ipynb
 data_drift.ipynb
 sampling_comparison.ipynb
 
 # Files
 README.md
+
+# Data
+/Data
 test.txt
 tost.txt
 nd.parquet

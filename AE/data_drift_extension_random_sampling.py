@@ -31,99 +31,30 @@ from AE.url_response import UrlResponse
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
 
-def sample_partition(pdf, samples_per_cluster: float = 0.25, random_state = 17):
-    return pdf.groupby("cluster", group_keys=False).apply(
-        lambda x: x.sample(frac=samples_per_cluster, random_state=random_state)
-)
+def get_samples(df, random_state = 17):
+    # Check for dask or pandas
+    is_pandas = isinstance(df, pd.DataFrame)
+    
+    # Select numeric columns
+    numeric_df = df.select_dtypes(include=[np.number])
+    if not is_pandas:
+        numeric_df = numeric_df.astype("float64")
+    numeric_df = numeric_df.dropna()
+    
+    # Get dimensions
+    if is_pandas:
+        n_rows = len(numeric_df)
+    else:
+        n_rows = numeric_df.shape[0].compute()
+    n_cols = len(numeric_df.columns)
+    
+    # Handle empty dataframe
+    if n_rows == 0 or n_cols == 0:
+        print("Got empty dataframe after filtering")
+        return df.head(0)
+    
 
-def get_clustering_samples(df, n_clusters: int = 5, random_state = 17):
-    try:
-        # Check for dask or pandas
-        is_pandas = isinstance(df, pd.DataFrame)
-        
-        # Select numeric columns
-        numeric_df = df.select_dtypes(include=[np.number])
-        if not is_pandas:
-            numeric_df = numeric_df.astype("float64")
-        numeric_df = numeric_df.dropna()
-        
-        # Get dimensions
-        if is_pandas:
-            n_rows = len(numeric_df)
-        else:
-            n_rows = numeric_df.shape[0].compute()
-        n_cols = len(numeric_df.columns)
-        
-        # Handle empty dataframe
-        if n_rows == 0 or n_cols == 0:
-            print("Got empty dataframe after filtering")
-            return df.head(0)
-        
-        # Return random samples for small datasets
-        if n_cols < 2:
-            print("Using random sampling due to small dataset")
-            return df.sample(frac=0.25, random_state=random_state)
-        
-        # Adjust n_clusters if needed
-        actual_n_clusters = min(n_clusters, n_rows - 1)
-        if actual_n_clusters != n_clusters:
-            print(f"Adjusted number of clusters to {actual_n_clusters}")
-        
-        # For pandas DataFrames, use scikit-learn
-        if is_pandas:
-            # Standardize
-            scaler = SklearnScaler()
-            X_scaled = scaler.fit_transform(numeric_df)
-            
-            # Perform clustering
-            mbkmeans = SklearnKMeans(n_clusters=actual_n_clusters,
-                                  init="k-means++",
-                                  random_state=random_state,
-                                  n_init=10)
-            labels = mbkmeans.fit_predict(X_scaled)
-            
-            # Reattach labels to original DataFrame
-            df_copy = df.copy()
-            df_copy['cluster'] = labels
-            
-            # Sample from each cluster
-            print("Sampling from clusters...")
-            result = pd.DataFrame()
-            for cluster_id in range(actual_n_clusters):
-                cluster_data = df_copy[df_copy['cluster'] == cluster_id]
-                if not cluster_data.empty:
-                    sample = cluster_data.sample(frac=0.15, random_state=random_state)
-                    result = pd.concat([result, sample])
-            
-            return result.drop('cluster', axis=1).reset_index(drop=True)
-            
-        else:
-            # Convert to Dask array and standardize
-            X = numeric_df.to_dask_array(lengths=True)
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
-            
-            # Perform clustering
-            kmeans = KMeans(n_clusters=actual_n_clusters, init="k-means||", random_state=random_state)
-            kmeans.fit(X_scaled)
-            
-            labels_da = kmeans.predict(X_scaled).persist()
-            wait(labels_da)
-            
-            # Reattach labels to original cleaned Dask DataFrame
-            cluster_series = dd.dataframe.from_dask_array(labels_da, index=numeric_df.index, columns="cluster")
-            clustered_df = numeric_df.assign(cluster=cluster_series)
-            
-            # Sample from each cluster
-            print("Sampling")
-            sampled_df = clustered_df.map_partitions(sample_partition, meta=clustered_df._meta)
-            
-            return sampled_df.drop("cluster", axis=1).reset_index(drop=True)
-        
-    except Exception as e:
-        print(f"Error in clustering: {e}")
-        print("Falling back to random sampling")
-        return df.sample(frac=0.15, random_state=random_state)
+    return df.sample(frac=0.15, random_state=random_state)
 
 
 def get_column_names(attribute_groups: dict, group:str):
@@ -139,7 +70,6 @@ def get_column_names(attribute_groups: dict, group:str):
         return [], []
 
 def process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_data_print_cols, npartitions=4):
-    """Use LocalCluster to avoid distributed computing issues while still using dask-ml"""
     # Initializing local dask cluster
     with LocalCluster(processes=False, n_workers=1, threads_per_worker=4, memory_limit='4GB') as cluster:
         with Client(cluster) as client:
@@ -156,24 +86,12 @@ def process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_da
             # Process reference data with pandas directly
             rename_dict_ref = dict(zip(ref_data_cols, ref_data_print_cols))
             ref_data = data[ref_data_cols].rename(columns=rename_dict_ref)
+
+            new_data = get_samples(new_data)
+            ref_data = get_samples(ref_data)
+
             print("Reference data processed")
 
-            # Only use Dask for the clustering operation if needed
-            # Convert to Dask only if the dataset is large enough to benefit from parallelization
-            if len(data) > 100000:  # Only use Dask for large datasets
-                # Use client.scatter to efficiently distribute data
-                new_data_future = client.scatter(new_data)
-                ref_data_future = client.scatter(ref_data)
-                
-                # Process with Dask
-                new_data = client.submit(get_clustering_samples, new_data_future, n_clusters=5).result()
-                ref_data = client.submit(get_clustering_samples, ref_data_future, n_clusters=5).result()
-            else:
-                # For smaller datasets, use pandas directly
-                new_data = get_clustering_samples(new_data, n_clusters=5)
-                ref_data = get_clustering_samples(ref_data, n_clusters=5)
-                
-            print("Clustering complete")
     
     return new_data, ref_data
 
@@ -183,8 +101,6 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     Sends two dataframes to the Flask service to calculate data drift
     and returns a URL to the drift report.
     """
-
-    report_url = None
     
     t0 = time.time()
     attribute_groups = metadata.get_columns_by_attribute_group()
@@ -194,7 +110,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     newdata_id_column_name, newdata_id_column_print_name = get_column_names(attribute_groups, "newdata_id")
 
     t1 = time.time()
-    print("t1: ", t1-t0)
+    print("t1:", t1-t0)
 
     # Get newdata column names
     newdata_column_names, newdata_column_print_names = get_column_names(attribute_groups, "newdata")
@@ -203,13 +119,13 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     newdata_datetime_column_names, newdata_datetime_column_print_names = get_column_names(attribute_groups, "newdata_date")
 
     t2 = time.time()
-    print("t2: ", t2-t1)
+    print("t2:", t2-t1)
 
     # Get Training data ID column name
     refdata_id_column_name, refdata_id_column_print_name = get_column_names(attribute_groups, "refdata_id")
 
     t3 = time.time()
-    print("t3: ",t3-t2)
+    print("t3:",t3-t2)
 
     # Get Training data column names
     refdata_column_names, refdata_column_print_names = get_column_names(attribute_groups, "refdata")
@@ -218,7 +134,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     refdata_datetime_column_names, refdata_datetime_column_print_names = get_column_names(attribute_groups, "refdata_date")
         
     t4 = time.time()
-    print("t4: ", t4-t3)
+    print("t4:", t4-t3)
 
     # Get Arrays to select and rename the data
     new_data_cols = newdata_id_column_name + newdata_column_names + newdata_datetime_column_names
@@ -232,19 +148,22 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     print(ref_data_print_cols)
 
     print("\n", new_data_print_cols)
+
     # Fetch last report if there is an uneven number of columns
     if (len(new_data_print_cols) != len(ref_data_print_cols)):
         if analytics_service.last_url != None:
             return UrlResponse(analytics_service.last_url)
         else:
-            print("Meesa not happy")
             return ca.ErrorResponse(f"Error: Uneven number of columns between new data and reference data")
     
     try:
         new_data, ref_data = process_data(data, new_data_cols, new_data_print_cols, ref_data_cols, ref_data_print_cols, npartitions=4)
         
         t5 = time.time()
-        print("t5: ", t5-t4)
+        print("t5:", t5-t4)
+
+        print("new_data: ", ref_data.shape)
+        print("ref_data: ", ref_data.shape)
 
         # Prepare the data for the POST request
         payload = {
@@ -268,7 +187,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     headers = {'Content-Type': 'application/json'}
 
     t6 = time.time()
-    print("t6: ", t6-t5)
+    print("t6:", t6-t5)
 
     # Send the request to the data drift calculation endpoint
 
@@ -280,7 +199,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
         return ca.ErrorResponse(f"Error generating report: {e}")
     
     t7 = time.time()
-    print("t7: ", t7-t6)
+    print("t7:", t7-t6)
 
     response_data = response.json()
     # Return the URL to view the generated report
