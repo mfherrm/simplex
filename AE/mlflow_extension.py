@@ -8,6 +8,7 @@ import json
 import time
 import orjson
 from flask import jsonify
+from dotenv import load_dotenv
 
 # Clustering imports
 from dask_ml.preprocessing import StandardScaler
@@ -32,8 +33,8 @@ from AE.url_response import UrlResponse
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
-os.environ["MLFLOW_TRACKING_URI"] = "https://mlflow.simplex4learning.de"
-os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["MLFLOW_TRACKING_URI"] = "https://mlflow.simplex4learning.de"
+# os.environ["OMP_NUM_THREADS"] = "1"
 
 def get_experiments(metadata: ca.RequestMetadata, data):
     """
@@ -295,11 +296,11 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     # id_col = [c.name for c in columns]
     # run_id = data[id_col]
 
-    token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJqNUpOUlhIX0JWZUZQS1lRanFUZ3lyWi1rYVJoUmJybGtPOWlmZjdDSDJvIn0.eyJleHAiOjE3NTczNTIyNjgsImlhdCI6MTc1NzMxNjI2OCwianRpIjoiYjJlYzRiYzEtMzAwZi00Yjg2LTg1YjQtNWU0YzIyMGUzZWQ3IiwiaXNzIjoiaHR0cHM6Ly9hdXRoLnNpbXBsZXg0bGVhcm5pbmcuZGUvcmVhbG1zL3NpbXBsZXg0bGVhcm5pbmciLCJhdWQiOlsibWxmbG93IiwiYWNjb3VudCJdLCJzdWIiOiJjN2U2YTU2NC0xZDAyLTQxZGEtOWRlOC0xNTA2ZTc0YzM5YjUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJtbGZsb3ctYXBpIiwic2Vzc2lvbl9zdGF0ZSI6IjIwNjkzZTA5LWVjMDctNGRlOS04YWM5LTgyODMzZWRlMzIxYSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXNpbXBsZXg0bGVhcm5pbmciXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIiwic2lkIjoiMjA2OTNlMDktZWMwNy00ZGU5LThhYzktODI4MzNlZGUzMjFhIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJNYXJpdXMgSGVycm1hbm4iLCJncm91cHMiOlsiQWRtaW5pc3RyYXRvciIsIkFuYWx5c3QiLCJDcmVhdG9yIiwiVmlld2VyIl0sInByZWZlcnJlZF91c2VybmFtZSI6Im1hcml1cyIsImdpdmVuX25hbWUiOiJNYXJpdXMiLCJmYW1pbHlfbmFtZSI6IkhlcnJtYW5uIiwiZW1haWwiOiJtYXJpdXMuaGVycm1hbm5AZGlzeS5uZXQifQ.BwgRd8BKqVG0MYJ7Cf9TmQ64mr1eBpddB61OxPM-tGCGk5fXL4GjZBG5nWWGIAxHRIw-twC3cmSgLTuLNwToLMjCuwSXrPoQtpZlowp1SmPPV5FgfHL1Z3n31erJHxbBVoaYk7noKGdvjX76a2CZFrPx5qQYpceAS566GNAhJIgwxczzB--t89leTtmxjJsz3YVPPj37647qYTfsLwKrMPJbpuRVyl6fweQCF5J2xjP4JGeBg0edC4uvCwm5R4wqJXQ-nd3AWAJRlUkn7ePJvL3aYSqWtNwapne3pFUvrzWb8WDiF14rrMKQTDqOzSs7wk6XqWoiG0dkISnwctefGw"
-    os.environ["MLFLOW_TRACKING_TOKEN"] = token
+    # token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJqNUpOUlhIX0JWZUZQS1lRanFUZ3lyWi1rYVJoUmJybGtPOWlmZjdDSDJvIn0.eyJleHAiOjE3NTczNTIyNjgsImlhdCI6MTc1NzMxNjI2OCwianRpIjoiYjJlYzRiYzEtMzAwZi00Yjg2LTg1YjQtNWU0YzIyMGUzZWQ3IiwiaXNzIjoiaHR0cHM6Ly9hdXRoLnNpbXBsZXg0bGVhcm5pbmcuZGUvcmVhbG1zL3NpbXBsZXg0bGVhcm5pbmciLCJhdWQiOlsibWxmbG93IiwiYWNjb3VudCJdLCJzdWIiOiJjN2U2YTU2NC0xZDAyLTQxZGEtOWRlOC0xNTA2ZTc0YzM5YjUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJtbGZsb3ctYXBpIiwic2Vzc2lvbl9zdGF0ZSI6IjIwNjkzZTA5LWVjMDctNGRlOS04YWM5LTgyODMzZWRlMzIxYSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXNpbXBsZXg0bGVhcm5pbmciXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6Im9wZW5pZCBwcm9maWxlIGVtYWlsIiwic2lkIjoiMjA2OTNlMDktZWMwNy00ZGU5LThhYzktODI4MzNlZGUzMjFhIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm5hbWUiOiJNYXJpdXMgSGVycm1hbm4iLCJncm91cHMiOlsiQWRtaW5pc3RyYXRvciIsIkFuYWx5c3QiLCJDcmVhdG9yIiwiVmlld2VyIl0sInByZWZlcnJlZF91c2VybmFtZSI6Im1hcml1cyIsImdpdmVuX25hbWUiOiJNYXJpdXMiLCJmYW1pbHlfbmFtZSI6IkhlcnJtYW5uIiwiZW1haWwiOiJtYXJpdXMuaGVycm1hbm5AZGlzeS5uZXQifQ.BwgRd8BKqVG0MYJ7Cf9TmQ64mr1eBpddB61OxPM-tGCGk5fXL4GjZBG5nWWGIAxHRIw-twC3cmSgLTuLNwToLMjCuwSXrPoQtpZlowp1SmPPV5FgfHL1Z3n31erJHxbBVoaYk7noKGdvjX76a2CZFrPx5qQYpceAS566GNAhJIgwxczzB--t89leTtmxjJsz3YVPPj37647qYTfsLwKrMPJbpuRVyl6fweQCF5J2xjP4JGeBg0edC4uvCwm5R4wqJXQ-nd3AWAJRlUkn7ePJvL3aYSqWtNwapne3pFUvrzWb8WDiF14rrMKQTDqOzSs7wk6XqWoiG0dkISnwctefGw"
+    # os.environ["MLFLOW_TRACKING_TOKEN"] = token
     
-    run_id = "3cdd0c9d090c444fa8be1a4b7ac39882"
-    os.environ["RUN_ID"] = run_id
+    # run_id = "3cdd0c9d090c444fa8be1a4b7ac39882"
+    # os.environ["RUN_ID"] = run_id
 
     logged_run = mlflow.get_run(os.getenv('RUN_ID'))
 
@@ -442,10 +443,11 @@ analytics_service.add_analytics_extension(experiments_extension)
 analytics_service.add_analytics_extension(model_and_runs_extension)
 analytics_service.add_analytics_extension(model_data_drift_extension)
 MEGABYTE = (2 ** 10) ** 2
-analytics_service._app.config['MAX_CONTENT_LENGTH'] = None
-analytics_service._app.config['MAX_FORM_PARTS'] = 500000
-analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = 500 * MEGABYTE
+analytics_service._app.config['MAX_CONTENT_LENGTH'] = os.getenv('MAX_CONTENT_LENGTH') #None
+analytics_service._app.config['MAX_FORM_PARTS'] = os.getenv('MAX_FORM_PARTS') #500000
+analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = os.getenv('MAX_FORM_MEMORY_SIZE') #* MEGABYTE
 analytics_service.last_url = None
 
 if __name__ == '__main__':
+    load_dotenv()
     analytics_service.run_development_server(5005)
