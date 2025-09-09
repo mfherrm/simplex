@@ -12,6 +12,7 @@ from app.funcs import evidently_funcs as ef
 
 # Data management imports
 import pandas as pd
+import polars as pl
 import orjson
 
 # ML imports
@@ -77,15 +78,14 @@ def data_drift():
 
         if not ref_payload or not new_payload:
             return jsonify({"error": "Missing reference_data or current_data"}), 400
-        
-        ref_df = pd.DataFrame(**ref_payload['data'])
-        new_df = pd.DataFrame(**new_payload['data'])
+        ref_df = pl.DataFrame(ref_payload['data'])
+        new_df = pl.DataFrame(new_payload['data'])
 
         t5 = time.time()
         print("Unpacked payload:", t5-t4)
 
          # Process New Data
-        new_df.columns = new_df.columns.astype(str)
+        new_df.columns = new_df.columns
         
         try:
             new_id_col = new_payload['id_column'][0]
@@ -98,7 +98,7 @@ def data_drift():
         print("Set new ID and datetime columns:", t6-t5) 
 
         # Process Reference Data
-        ref_df.columns = ref_df.columns.astype(str)
+        ref_df.columns = ref_df.columns
 
         try:
             ref_id_col = ref_payload['id_column'][0]
@@ -118,28 +118,28 @@ def data_drift():
         
         # Rename the columns
         rename_dict = dict(zip(ref_df.columns[:], new_df.columns[:]))
-        ref_df.rename(columns=rename_dict, inplace=True)
+        ref_df = ref_df.rename(rename_dict)
 
         t8 = time.time()
         print("Renamed and reordered columns:", t8-t7) 
 
         # Process data and create dataset templates
-        new_processed, data_def_new = ef.map_to_def(new_df, new_id_col, new_dt_cols)
+        new_processed, data_def_new = ef.map_to_def_pl(new_df, new_id_col, new_dt_cols)
         
         t9 = time.time()
         print("Mapped new columns:", t9-t8) 
 
-        new_dataset = Dataset.from_pandas(new_processed, data_def_new)
+        new_dataset = Dataset.from_pandas(new_processed.to_pandas(), data_def_new)
 
         t10 = time.time()
         print("Created new dataset:", t10-t9) 
 
-        ref_processed, data_def_ref = ef.map_to_def(ref_df, ref_id_col, ref_dt_cols)
+        ref_processed, data_def_ref = ef.map_to_def_pl(ref_df, ref_id_col, ref_dt_cols)
 
         t11 = time.time()
         print("Mapped reference columns:", t11-t10) 
 
-        ref_dataset = Dataset.from_pandas(ref_processed, data_def_ref)
+        ref_dataset = Dataset.from_pandas(ref_processed.to_pandas(), data_def_ref)
 
         t12 = time.time()
         print("Created reference dataset:", t12-t11) 

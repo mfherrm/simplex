@@ -4,3 +4,4 @@ evidently
 scikit-learn
 mlflow
 orjson
+polars
