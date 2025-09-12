@@ -12,8 +12,8 @@ def get_experiments(metadata: ca.RequestMetadata, data):
     """
     Send a token and get experiments in a dataframe, e.g.
 
-    Experiment_ID | Experiment_Name |
-          1       | Test_Experiment |
+    | Experiment_ID | Experiment_Name |
+    |      1        | Test_Experiment |
     """
 
     attribute_groups = metadata.get_columns_by_attribute_group()

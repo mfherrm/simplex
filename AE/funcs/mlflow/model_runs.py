@@ -13,8 +13,8 @@ def get_models_and_runs(metadata: ca.RequestMetadata, data):
     """
     Send a token and an experiment name and get models and runs, as well as their ID in a dataframe, e.g.
 
-    DF_ID | Run ID | Run Name |
-    1     | a8d9v7 | Test-Run |
+    | DF_ID | Run ID | Run Name |
+    |   1   | a8d9v7 | Test-Run |
     """
     attribute_groups = metadata.get_columns_by_attribute_group()
 
