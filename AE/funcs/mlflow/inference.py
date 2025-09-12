@@ -9,6 +9,24 @@ import pickle
 # disy Cadenza imports
 import cadenzaanalytics as ca
 
+def get_row(df, row):
+    """
+    Maps rows for the RowWiseCSVResponse
+    """
+    response_row = []
+    # Ensure identical types 
+    for idx, val in df.iloc[row.name].items():
+        if idx in df.select_dtypes("Int64"):
+            response_row.append(val.astype(int))
+        else:
+            response_row.append(val)
+    print(response_row)
+    return response_row
+
+# -----------------------------------------------------------------------------------------------------
+# As AE of type enrichment
+# -----------------------------------------------------------------------------------------------------
+
 def get_predictions_enr(metadata: ca.RequestMetadata, data):
     """
     Send input data and a run_id and get predictions, e.g.
@@ -68,16 +86,10 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
 
     return ca.RowWiseMappingCsvResponse(response_metadata, lambda row: get_row(prediction_frame, row))
 
-def get_row(df, row):
-    response_row = []
-    # Ensure identical types 
-    for idx, val in df.iloc[row.name].items():
-        if idx in df.select_dtypes("Int64"):
-            response_row.append(val.astype(int))
-        else:
-            response_row.append(val)
-    print(response_row)
-    return response_row
+
+# -----------------------------------------------------------------------------------------------------
+# As AE of type calculation
+# -----------------------------------------------------------------------------------------------------
 
 def get_predictions_cal(metadata: ca.RequestMetadata, data):
     """

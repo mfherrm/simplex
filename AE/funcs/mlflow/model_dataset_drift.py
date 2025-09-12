@@ -6,19 +6,16 @@ import time
 import requests
 
 # Data processing
-import pandas as pd
-import numpy as np
 import polars as pl
 import polars.selectors as cs
 import orjson
-from dask.distributed import LocalCluster, Client
 
 # MLFlow imports
 import mlflow
 
 # disy Cadenza imports
 import cadenzaanalytics as ca
-from AE.url_response import UrlResponse
+from AE.extension_funcs.url_response import UrlResponse
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
@@ -35,7 +32,9 @@ def get_column_names(attribute_groups: dict, group:str):
         return [], []
 
 def process_data(data: pl.DataFrame, common_columns, new_data_cols = None, new_data_print_cols = None, desired_order = None):
-    print(type(data))
+    """
+    Preprocesses data by renaming, reordering and selecting only numeric columns. Samples data afterwards.
+    """
     data = data.drop_nans()
 
     if new_data_cols:
@@ -90,6 +89,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     # columns = attribute_groups["run_id"]
     # id_col = [c.name for c in columns]
     # run_id = data[id_col]
+    # mlflow.get_run(run_id)
 
     logged_run = mlflow.get_run(os.getenv('RUN_ID'))
 

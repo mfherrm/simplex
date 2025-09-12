@@ -15,6 +15,9 @@ from AE.funcs.mlflow.experiments import get_experiments as model_experiments
 from AE.funcs.mlflow.inference import get_predictions_enr as model_inference_enr
 from AE.funcs.mlflow.inference import get_predictions_cal as model_inference_cal
 from AE.funcs.mlflow.training import retrain_model as model_training
+from AE.funcs.datadrift.dataset_drift import get_random_sampling_report as data_drift_rs
+from AE.funcs.datadrift.dataset_drift import get_random_clustering_report as data_drift_rc
+
 
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
@@ -235,6 +238,131 @@ model_training_extension = ca.CadenzaAnalyticsExtension(
 
 
 # -----------------------------------------------------------------------------------------------------
+# Dataset drift extension random sampling
+# -----------------------------------------------------------------------------------------------------
+
+# New dataset ID column
+new_attribute_group_id = ca.AttributeGroup(
+    name="newdata_id",
+    print_name="New Data ID Column",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64],
+    min_attributes=0,
+    max_attributes = 1
+)
+
+# New dataset 
+new_attribute_group = ca.AttributeGroup(
+    name="newdata",
+    print_name="New Data",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes = None
+)
+
+# New dataset datetime column(s)
+new_attribute_group_date = ca.AttributeGroup(
+    name="newdata_date",
+    print_name="New Data Datetime Column(s)",
+    data_types=[ca.DataType.ZONEDDATETIME],
+)
+
+# Training dataset ID column
+ref_attribute_group_id = ca.AttributeGroup(
+    name="refdata_id",
+    print_name="Training Data ID Column",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64],
+    min_attributes=0,
+    max_attributes = 1
+)
+
+# Training dataset 
+ref_attribute_group = ca.AttributeGroup(
+    name="refdata",
+    print_name="Training Data",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes = None
+)
+
+# Training dataset datetime column
+ref_attribute_group_date = ca.AttributeGroup(
+    name="refdata_date",
+    print_name="Training Data Datetime Column(s)",
+    data_types=[ca.DataType.ZONEDDATETIME],
+)
+
+data_drift_extension_rs = ca.CadenzaAnalyticsExtension(
+    relative_path="data-drift-extension-rs", 
+    analytics_function= data_drift_rs, 
+    print_name="Data Drift Extension Random Sampling",
+    extension_type=ca.ExtensionType.VISUALIZATION,
+    attribute_groups=[new_attribute_group, new_attribute_group_id, new_attribute_group_date, ref_attribute_group, ref_attribute_group_id, ref_attribute_group_date]
+)
+
+# -----------------------------------------------------------------------------------------------------
+# Dataset drift extension random clustering
+# -----------------------------------------------------------------------------------------------------
+
+# New dataset ID column
+new_attribute_group_id = ca.AttributeGroup(
+    name="newdata_id",
+    print_name="New Data ID Column",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64],
+    min_attributes=0,
+    max_attributes = 1
+)
+
+# New dataset 
+new_attribute_group = ca.AttributeGroup(
+    name="newdata",
+    print_name="New Data",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes = None
+)
+
+# New dataset datetime column(s)
+new_attribute_group_date = ca.AttributeGroup(
+    name="newdata_date",
+    print_name="New Data Datetime Column(s)",
+    data_types=[ca.DataType.ZONEDDATETIME],
+)
+
+# Training dataset ID column
+ref_attribute_group_id = ca.AttributeGroup(
+    name="refdata_id",
+    print_name="Training Data ID Column",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64],
+    min_attributes=0,
+    max_attributes = 1
+)
+
+# Training dataset 
+ref_attribute_group = ca.AttributeGroup(
+    name="refdata",
+    print_name="Training Data",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes = None
+)
+
+# Training dataset datetime column
+ref_attribute_group_date = ca.AttributeGroup(
+    name="refdata_date",
+    print_name="Training Data Datetime Column(s)",
+    data_types=[ca.DataType.ZONEDDATETIME],
+)
+
+data_drift_extension_rc = ca.CadenzaAnalyticsExtension(
+    relative_path="data-drift-extension-rc", 
+    analytics_function= data_drift_rc, 
+    print_name="Data Drift Extension Random Clustering",
+    extension_type=ca.ExtensionType.VISUALIZATION,
+    attribute_groups=[new_attribute_group, new_attribute_group_id, new_attribute_group_date, ref_attribute_group, ref_attribute_group_id, ref_attribute_group_date]
+)
+
+
+# -----------------------------------------------------------------------------------------------------
 # Analytics extension
 # -----------------------------------------------------------------------------------------------------
 
@@ -245,6 +373,8 @@ analytics_service.add_analytics_extension(model_data_drift_extension)
 analytics_service.add_analytics_extension(model_inference_extension_enr)
 analytics_service.add_analytics_extension(model_inference_extension_cal)
 analytics_service.add_analytics_extension(model_training_extension)
+analytics_service.add_analytics_extension(data_drift_extension_rs)
+analytics_service.add_analytics_extension(data_drift_extension_rc)
 
 MEGABYTE = (2 ** 10) ** 2
 analytics_service._app.config['MAX_CONTENT_LENGTH'] = os.getenv('MAX_CONTENT_LENGTH')
