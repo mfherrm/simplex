@@ -10,6 +10,10 @@ import polars as pl
 import polars.selectors as cs
 import orjson
 
+# SKlearn imports
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
 # MLFlow imports
 import mlflow
 
@@ -19,6 +23,11 @@ from AE.extension_funcs.url_response import UrlResponse
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
+
+# -----------------------------------------------------------------------------------------------------
+# Methods to process data
+# -----------------------------------------------------------------------------------------------------
+
 
 def get_column_names(attribute_groups: dict, group:str):
     """
@@ -31,35 +40,89 @@ def get_column_names(attribute_groups: dict, group:str):
         print("Column type not given")
         return [], []
 
-def process_data(data: pl.DataFrame, common_columns, new_data_cols = None, new_data_print_cols = None, desired_order = None):
+def process_data(data: pl.DataFrame, common_columns, data_cols = None, data_print_cols = None, desired_order = [], clustering = False, fraction = 0.15):
     """
     Preprocesses data by renaming, reordering and selecting only numeric columns. Samples data afterwards.
     """
     data = data.drop_nans()
 
-    if new_data_cols:
+    if data_cols:
         # Map cadenza column names to their print names
-        rename_dict_new = dict(zip(new_data_cols, new_data_print_cols))
+        rename_dict_new = dict(zip(data_cols, data_print_cols))
 
         # Select only common columns (columns that occur in both training and new data)
         short_dict = {key:value for key, value in rename_dict_new.items() if value in common_columns}
 
-        # Select common columns, rename them and order them identically to the training data
-        data = data[list(short_dict.keys())].rename(short_dict)[desired_order]
-        
+        # Select common columns, order and rename them identically to the training data
+        data = data[list(short_dict.keys())].rename(short_dict)
+
     # Select numeric columns
     numeric_df = data.select(cs.numeric())
+
+    if any(desired_order):
+            numeric_df = numeric_df[desired_order]
 
     # Handle empty dataframe
     if any([dim==0 for dim in numeric_df.shape]):
         print("No numerical columns in the dataframe")
         return data.head(0)
     
+    if clustering:
+        return get_clustering_samples(numeric_df, n_clusters = 5, fraction = fraction, seed=17)
+    else:
     # Sample to speed up report generation
-    return numeric_df.sample(fraction=0.15, seed=17)
+        return numeric_df.sample(fraction = fraction, seed=17)
+
+def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15, seed = 17):
+    """
+    Clusters and samples input data 
+    """
+    try:
+        # Handle empty dataframe
+        if any([dim==0 for dim in df.shape]):
+            print("No numerical columns in the dataframe")
+            return df.head(0)
+        
+        # Adjust n_clusters if needed
+        actual_n_clusters = min(n_clusters, df.shape[0] - 1)
+        if actual_n_clusters != n_clusters:
+            print(f"Adjusted number of clusters to {actual_n_clusters}")
+
+        scaler = StandardScaler().set_output(transform="polars")
+        X_scaled = scaler.fit_transform(df)
+
+        # Perform clustering
+        kmeans = KMeans(n_clusters=actual_n_clusters,
+                                  init="k-means++",
+                                  random_state=seed,
+                                  n_init=10).set_output(transform="polars")
+        cluster= kmeans.fit_predict(X_scaled)
+
+        # Reattach labels to original DataFrame
+        df_copy = df.clone()
+        df_copy = df_copy.with_columns(
+            cluster = cluster
+        )
+        # Sample from each cluster
+        print("Sampling from clusters...")
+        result = pl.DataFrame()
+        for cluster_id in range(actual_n_clusters):
+            
+            cluster_data = df_copy.filter(df_copy['cluster'] == cluster_id)
+            
+            if not cluster_data.is_empty():
+                sample = cluster_data.sample(fraction=fraction, seed=seed)
+                result = pl.concat([result, sample])
+        
+        return result.drop('cluster')
+        
+    except Exception as e:
+        print(f"Error in clustering: {e}")
+        print("Falling back to random sampling")
+        return df.sample(fraction=fraction, seed=seed)
 
 
-def calculate_data_drift(metadata: ca.RequestMetadata, data):
+def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     """
     Sends a dataframe and a Run ID to the Flask service to calculate data drift
     and returns a URL to the drift report.
@@ -185,4 +248,23 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data):
     # Return the URL to view the generated report
     report_url = f"{URL_PART}"+report_url.split(")")[1]
     # analytics_service.last_url = report_url
+    
+    return report_url
+    # return UrlResponse(report_url)
+
+
+# -----------------------------------------------------------------------------------------------------
+# Dataset drift extension random sampling
+# -----------------------------------------------------------------------------------------------------
+
+def get_random_sampling_report(metadata: ca.RequestMetadata, data):
+    report_url = calculate_data_drift(metadata, data, clustering=False)
+    return UrlResponse(report_url)
+
+# -----------------------------------------------------------------------------------------------------
+# Dataset drift extension random clustering
+# -----------------------------------------------------------------------------------------------------
+
+def get_random_clustering_report(metadata: ca.RequestMetadata, data):
+    report_url = calculate_data_drift(metadata, data, clustering=True)
     return UrlResponse(report_url)

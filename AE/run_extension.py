@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 import cadenzaanalytics as ca
 
 # Analytics extensions
-from AE.funcs.mlflow.model_dataset_drift import calculate_data_drift as model_data_drift
+from AE.funcs.mlflow.model_dataset_drift import get_random_sampling_report as model_data_drift_rs
+from AE.funcs.mlflow.model_dataset_drift import get_random_clustering_report as model_data_drift_rc
 from AE.funcs.mlflow.model_runs import get_models_and_runs as model_runs
 from AE.funcs.mlflow.experiments import get_experiments as model_experiments
 from AE.funcs.mlflow.inference import get_predictions_enr as model_inference_enr
@@ -17,8 +18,6 @@ from AE.funcs.mlflow.inference import get_predictions_cal as model_inference_cal
 from AE.funcs.mlflow.training import retrain_model as model_training
 from AE.funcs.datadrift.dataset_drift import get_random_sampling_report as data_drift_rs
 from AE.funcs.datadrift.dataset_drift import get_random_clustering_report as data_drift_rc
-
-
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
@@ -77,7 +76,7 @@ model_and_runs_extension = ca.CadenzaAnalyticsExtension(
 )
 
 # -----------------------------------------------------------------------------------------------------
-# Model specific data drift
+# Model specific data drift with random sampling
 # -----------------------------------------------------------------------------------------------------
 
 
@@ -106,10 +105,49 @@ new_attribute_group_date = ca.AttributeGroup(
     data_types=[ca.DataType.ZONEDDATETIME],
 )
 
-model_data_drift_extension = ca.CadenzaAnalyticsExtension(
+model_data_drift_extension_rs = ca.CadenzaAnalyticsExtension(
     relative_path="model-data-drift-extension-rs", 
-    analytics_function= model_data_drift, 
+    analytics_function= model_data_drift_rs, 
     print_name="Model Data Drift Extension Random Sampling",
+    extension_type=ca.ExtensionType.VISUALIZATION,
+    attribute_groups=[new_attribute_group, new_attribute_group_id, new_attribute_group_date]
+)
+
+
+# -----------------------------------------------------------------------------------------------------
+# Model specific data drift with random clustering
+# -----------------------------------------------------------------------------------------------------
+
+
+# New dataset ID column
+new_attribute_group_id = ca.AttributeGroup(
+    name="newdata_id",
+    print_name="New Data ID Column",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64],
+    min_attributes=0,
+    max_attributes = 1
+)
+
+# New dataset 
+new_attribute_group = ca.AttributeGroup(
+    name="newdata",
+    print_name="New Data",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes = None
+)
+
+# New dataset datetime column(s)
+new_attribute_group_date = ca.AttributeGroup(
+    name="newdata_date",
+    print_name="New Data Datetime Column(s)",
+    data_types=[ca.DataType.ZONEDDATETIME],
+)
+
+model_data_drift_extension_rc = ca.CadenzaAnalyticsExtension(
+    relative_path="model-data-drift-extension-rc", 
+    analytics_function= model_data_drift_rc, 
+    print_name="Model Data Drift Extension Random Clustering",
     extension_type=ca.ExtensionType.VISUALIZATION,
     attribute_groups=[new_attribute_group, new_attribute_group_id, new_attribute_group_date]
 )
@@ -369,7 +407,8 @@ data_drift_extension_rc = ca.CadenzaAnalyticsExtension(
 analytics_service = ca.CadenzaAnalyticsExtensionService()
 analytics_service.add_analytics_extension(experiments_extension)
 analytics_service.add_analytics_extension(model_and_runs_extension)
-analytics_service.add_analytics_extension(model_data_drift_extension)
+analytics_service.add_analytics_extension(model_data_drift_extension_rs)
+analytics_service.add_analytics_extension(model_data_drift_extension_rc)
 analytics_service.add_analytics_extension(model_inference_extension_enr)
 analytics_service.add_analytics_extension(model_inference_extension_cal)
 analytics_service.add_analytics_extension(model_training_extension)
