@@ -7,7 +7,7 @@ import hashlib
 import time
 
 # custom funcs
-from app.funcs import evidently_funcs as ef
+from application_files.funcs import evidently_funcs as ef
 
 
 # Data management imports
@@ -25,7 +25,7 @@ from evidently import Report
 
 bp = Blueprint('main', __name__)
 
-REPORT_DIR = 'app/reports'
+REPORT_DIR = 'application_files/reports'
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST'),
 urlpart = f"{WEBSERVICE_HOST}"
@@ -145,7 +145,7 @@ def data_drift():
         print("Created reference dataset:", t12-t11) 
         
         # wasserstein does not work for categorical data
-        report = Report([DataDriftPreset(method="psi")], include_tests="True")
+        report = Report([DataDriftPreset(method="wasserstein")], include_tests="True")
         reps = report.run(ref_dataset, new_dataset)
 
         t13 = time.time()

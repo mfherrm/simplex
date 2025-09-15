@@ -11,13 +11,13 @@ import mlflow
 def mlflow_auth(URI = "https://mlflow.simplex4learning.de/"):
     MLFLOW_TRACKING_URI = URI
 
-    # 1. Set MLflow Tracking URI
+    # Set MLflow Tracking URI
     os.environ["MLFLOW_TRACKING_URI"] = MLFLOW_TRACKING_URI
 
-    # 2. get bearer token
+    # Get bearer token
     auth_token = getpass.getpass("\nPlease enter the bearer token you got from the network tab in your web browser.")
 
-    # 3. Set the token and run MLflow command
+    # Set token and run MLflow command
     if auth_token and auth_token.strip():
         os.environ["MLFLOW_TRACKING_TOKEN"] = auth_token
         # If the server has a self-signed SSL certificate
@@ -89,3 +89,6 @@ def get_experiments(verbose=True):
 
     except Exception as e:
         print(f"\nAn error occurred during the MLflow operation: {e}")
+
+
+mlflow_auth(URI = "https://mlflow.simplex4learning.de/")
