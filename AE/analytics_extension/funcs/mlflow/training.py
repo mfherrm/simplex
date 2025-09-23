@@ -208,7 +208,8 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     # Delete model and training data
     os.remove(model)
     os.remove(training_data_path) 
-    os.remove(file_path) 
+    os.remove(file_path)
+    os.remove("./input_example.json") 
     
     # Build response frame
     model_info_frame = pd.DataFrame({"run_id":run_id, "model_id":logged_run.to_dictionary()["outputs"]["model_outputs"][0].model_id}, index = [1])
