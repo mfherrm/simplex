@@ -1,6 +1,7 @@
 # Control imports
 import os
 import pandas as pd
+import numpy as np
 
 # MLFlow imports
 import mlflow
@@ -66,12 +67,18 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
     # Delete model
     os.remove(model) 
 
-    prediction_frame = input_data
-    prediction_frame["predictions"] = predictions
+    # prediction_frame = input_data
 
+    prediction_frame = pd.DataFrame({'ID':np.arange(0, len(predictions)), 'predictions':predictions})
+    # prediction_frame["predictions"] = predictions
+    # prediction_frame.insert(0, 'ID', prediction_frame.index)
+    
     print(prediction_frame)
 
-    input_metadata = metadata.get_columns_by_attribute_group()['input_data']
+    # input_metadata = metadata.get_columns_by_attribute_group()['input_data']
+
+    id_metadata = metadata.get_columns_by_attribute_group()['net.disy.cadenza.keyAttributeGroup']
+    print(id_metadata)
 
     prediction_metadata = [ca.ColumnMetadata(
             name="predictions",
@@ -79,12 +86,12 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
             data_type=ca.DataType.FLOAT64,
             attribute_group_name='Predictions',
             role=ca.AttributeRole.MEASURE)]
+    
+    response_metadata = id_metadata + prediction_metadata #input_metadata + prediction_metadata
 
-    response_metadata = input_metadata + prediction_metadata
+    return ca.CsvResponse(prediction_frame, response_metadata)
 
-    # return ca.CsvResponse(prediction_frame, response_metadata)
-
-    return ca.RowWiseMappingCsvResponse(response_metadata, lambda row: get_row(prediction_frame, row))
+    # return ca.RowWiseMappingCsvResponse(response_metadata, lambda row: get_row(prediction_frame, row))
 
 
 # -----------------------------------------------------------------------------------------------------

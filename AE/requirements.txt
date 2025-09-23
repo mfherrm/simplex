@@ -1,0 +1,11 @@
+Flask
+polars
+orjson
+mlflow
+scikit-learn
+pandas
+requests_toolbelt
+cadenzaanalytics
+requests
+numpy
+dotenv

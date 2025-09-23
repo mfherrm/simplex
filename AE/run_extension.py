@@ -9,15 +9,15 @@ from dotenv import load_dotenv
 import cadenzaanalytics as ca
 
 # Analytics extensions
-from AE.funcs.mlflow.model_dataset_drift import get_random_sampling_report as model_data_drift_rs
-from AE.funcs.mlflow.model_dataset_drift import get_random_clustering_report as model_data_drift_rc
-from AE.funcs.mlflow.model_runs import get_models_and_runs as model_runs
-from AE.funcs.mlflow.experiments import get_experiments as model_experiments
-from AE.funcs.mlflow.inference import get_predictions_enr as model_inference_enr
-from AE.funcs.mlflow.inference import get_predictions_cal as model_inference_cal
-from AE.funcs.mlflow.training import retrain_model as model_training
-from AE.funcs.datadrift.dataset_drift import get_random_sampling_report as data_drift_rs
-from AE.funcs.datadrift.dataset_drift import get_random_clustering_report as data_drift_rc
+from analytics_extension.funcs.mlflow.model_dataset_drift import get_random_sampling_report as model_data_drift_rs
+from analytics_extension.funcs.mlflow.model_dataset_drift import get_random_clustering_report as model_data_drift_rc
+from analytics_extension.funcs.mlflow.model_runs import get_models_and_runs as model_runs
+from analytics_extension.funcs.mlflow.experiments import get_experiments as model_experiments
+from analytics_extension.funcs.mlflow.inference import get_predictions_enr as model_inference_enr
+from analytics_extension.funcs.mlflow.inference import get_predictions_cal as model_inference_cal
+from analytics_extension.funcs.mlflow.training import retrain_model as model_training
+from analytics_extension.funcs.datadrift.dataset_drift import get_random_sampling_report as data_drift_rs
+from analytics_extension.funcs.datadrift.dataset_drift import get_random_clustering_report as data_drift_rc
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
@@ -422,5 +422,5 @@ analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = os.getenv('MAX_FORM_MEMO
 analytics_service.last_url = None
 
 if __name__ == '__main__':
-    load_dotenv()
+    load_dotenv()   
     analytics_service.run_development_server(5005)

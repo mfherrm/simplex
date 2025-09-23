@@ -10,16 +10,16 @@ import polars as pl
 import polars.selectors as cs
 import orjson
 
-# MLFlow imports
-import mlflow
-
 # SKlearn imports
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
+# MLFlow imports
+import mlflow
+
 # disy Cadenza imports
 import cadenzaanalytics as ca
-from AE.extension_funcs.url_response import UrlResponse
+from AE.analytics_extension.extension_funcs.url_response import UrlResponse
 
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST', 'http://127.0.0.1:5000')
 URL_PART = f"{WEBSERVICE_HOST}"
@@ -121,9 +121,6 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
         print("Falling back to random sampling")
         return df.sample(fraction=fraction, seed=seed)
 
-# -----------------------------------------------------------------------------------------------------
-# Calculate dataset drift report
-# -----------------------------------------------------------------------------------------------------
 
 def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     """
@@ -151,24 +148,44 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     print("Got new data column names:", t2-t1)
 
     # Get Training data
+    
+    # columns = attribute_groups["run_id"]
+    # id_col = [c.name for c in columns]
+    # run_id = data[id_col]
+    # mlflow.get_run(run_id)
 
-    # Get Training data ID column name
-    refdata_id_column_name, refdata_id_column_print_name = get_column_names(attribute_groups, "refdata_id")
+    logged_run = mlflow.get_run(os.getenv('RUN_ID'))
 
+    # Get artifact path via the dataset source logged with the dataset
+    artifact_path = os.path.join(logged_run.info.artifact_uri, logged_run.inputs.dataset_inputs[0].dataset.source.split("artifacts/")[-1]).replace("\\","/")[:-2]
+
+    training_data = mlflow.artifacts.download_artifacts(artifact_path, dst_path = "./")
+
+    ref_data = pl.read_parquet(training_data)
+
+    os.remove(training_data) 
+    # This code is nicer:
+    # dataset_source = mlflow.data.get_source(logged_dataset)
+    # local_dataset = dataset_source.load()
+    # But it currently does not work due to authentication problems (downloads login page as HTML file)
+    # If the method above returns a not implemented error: dataset was commited without source before (https://github.com/mlflow/mlflow/issues/13015)
+    # -> Need to slightly change dataset to change digest
+
+    
     # Get Training data column names
-    refdata_column_names, refdata_column_print_names = get_column_names(attribute_groups, "refdata")
-
-    # Get Training data datetime column names
-    refdata_datetime_column_names, refdata_datetime_column_print_names = get_column_names(attribute_groups, "refdata_date")
+    ref_data_print_cols = ref_data.columns
 
     # Get Arrays to select and rename the data
     new_data_cols = newdata_id_column_name + newdata_column_names + newdata_datetime_column_names
     new_data_print_cols = newdata_id_column_print_name + newdata_column_print_names + newdata_datetime_column_print_names
 
-    ref_data_cols = refdata_id_column_name + refdata_column_names + refdata_datetime_column_names
-    ref_data_print_cols = refdata_id_column_print_name + refdata_column_print_names + refdata_datetime_column_print_names
-
     common_columns = list(set(ref_data_print_cols).intersection(new_data_print_cols))
+
+    print(newdata_column_print_names)
+
+    print(ref_data_print_cols)
+
+    print("\n", new_data_print_cols)
 
     # Fetch last report if there is an uneven number of columns
     if len(common_columns)<1: #(len(new_data_print_cols) != len(ref_data_print_cols)):
@@ -176,14 +193,13 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
         #     return UrlResponse(analytics_service.last_url)
         # else:
         return ca.ErrorResponse(f"Error: No common columns between new data and reference data")
-
+    
     try:
         # Process training data 
-        ref_data = process_data(pl.from_pandas(data[ref_data_cols]), common_columns, ref_data_cols, ref_data_print_cols,  clustering=clustering)
+        ref_data = process_data(ref_data, common_columns)
 
-        print("Finished processing the reference data")
         # Process new data
-        new_data = process_data(pl.from_pandas(data[new_data_cols]), common_columns, new_data_cols, new_data_print_cols, desired_order = ref_data.columns, clustering=clustering)
+        new_data = process_data(pl.from_pandas(data), common_columns, new_data_cols, new_data_print_cols, desired_order = ref_data.columns)
         
         t3 = time.time()
         print("Processed data:", t3-t2)
@@ -231,12 +247,15 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
 
     # Return the URL to view the generated report
     report_url = f"{URL_PART}"+report_url.split(")")[1]
+    # analytics_service.last_url = report_url
+    
     return report_url
+    # return UrlResponse(report_url)
+
 
 # -----------------------------------------------------------------------------------------------------
 # Dataset drift extension random sampling
 # -----------------------------------------------------------------------------------------------------
-
 
 def get_random_sampling_report(metadata: ca.RequestMetadata, data):
     report_url = calculate_data_drift(metadata, data, clustering=False)

@@ -142,7 +142,10 @@ def retrain_model(metadata: ca.RequestMetadata, data):
 
     print("Logging model parameters, metrics, and artifacts to MLFlow...")
 
+    mlflow.set_experiment(experiment_id=logged_run.info.experiment_id)
+
     with mlflow.start_run() as run:
+        print("Started run")
 
         # Log metrics
         mlflow.log_metrics(
@@ -150,16 +153,16 @@ def retrain_model(metadata: ca.RequestMetadata, data):
                     "root mean squared error": rmse
                     }
         )
-        conda_env_filePath =os.path.join(os.getcwd(), "AE", "funcs", "mlflow", "conda_env.yml").replace("\\", "/")
-        print(os.path.exists(conda_env_filePath))
+        conda_env_filePath =os.path.join(os.getcwd(), "AE", "conda_env.yml").replace("\\", "/")
+
         if not os.path.exists(conda_env_filePath):
             return ca.ErrorResponse(f"Error: Please provide a conda env file in the directory this file is run from.")
-        
+
         # Log the model, which inherits the parameters and metric
         model_info = mlflow.sklearn.log_model(
             sk_model=loaded_model,
             conda_env=conda_env_filePath,
-            # registered_model_name=model_name[0],
+            registered_model_name=model_name[0],
             signature=infer_signature(X_train, y_pred),
             input_example=X_train[:10],
             metadata={
@@ -175,7 +178,7 @@ def retrain_model(metadata: ca.RequestMetadata, data):
         )
 
         subfolder = "data_folder"
-
+        print("subfolder")
         mlflow.log_artifact(local_path=training_data_path,
                             artifact_path=subfolder,
                             )
@@ -209,19 +212,20 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     
     # Build response frame
     model_info_frame = pd.DataFrame({"run_id":run_id, "model_id":logged_run.to_dictionary()["outputs"]["model_outputs"][0].model_id}, index = [1])
-
+    print(model_info_frame)
     # Model id and associated run
     training_metadata = [ca.ColumnMetadata(
             name="run_id",
             print_name="Run ID of new model",
             data_type=ca.DataType.STRING,
             attribute_group_name='Run ID',
-            role=ca.AttributeRole.DIMENSION)],
-    [ca.ColumnMetadata(
+            role=ca.AttributeRole.DIMENSION),
+    ca.ColumnMetadata(
             name="model_id",
             print_name="ID of new model",
             data_type=ca.DataType.STRING,
             attribute_group_name='Model ID',
             role=ca.AttributeRole.DIMENSION)]
+    print(training_metadata)
 
     return ca.CsvResponse(model_info_frame, training_metadata)
