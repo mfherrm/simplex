@@ -1,5 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, send_from_directory
-from io import StringIO
+from flask import Blueprint, request, jsonify, send_from_directory
 
 # Control imports
 import os
@@ -9,14 +8,9 @@ import time
 # custom funcs
 from application_files.funcs import evidently_funcs as ef
 
-
 # Data management imports
-import pandas as pd
 import polars as pl
 import orjson
-
-# ML imports
-from sklearn.model_selection import train_test_split
 
 # Evidently imports
 from evidently.presets import DataDriftPreset

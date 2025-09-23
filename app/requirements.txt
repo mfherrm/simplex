@@ -1,7 +1,4 @@
 Flask
-pandas
-evidently
-scikit-learn
-mlflow
-orjson
 polars
+orjson
+evidently
