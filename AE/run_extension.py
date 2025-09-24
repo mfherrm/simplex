@@ -416,9 +416,9 @@ analytics_service.add_analytics_extension(data_drift_extension_rs)
 analytics_service.add_analytics_extension(data_drift_extension_rc)
 
 MEGABYTE = (2 ** 10) ** 2
-analytics_service._app.config['MAX_CONTENT_LENGTH'] = os.getenv('MAX_CONTENT_LENGTH')
-analytics_service._app.config['MAX_FORM_PARTS'] = os.getenv('MAX_FORM_PARTS')
-analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = os.getenv('MAX_FORM_MEMORY_SIZE')
+analytics_service._app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 1073741824))
+analytics_service._app.config['MAX_FORM_PARTS'] = int(os.getenv('MAX_FORM_PARTS', 500000))
+analytics_service._app.config['MAX_FORM_MEMORY_SIZE'] = int(os.getenv('MAX_FORM_MEMORY_SIZE', 524288000))
 analytics_service.last_url = None
 
 if __name__ == '__main__':

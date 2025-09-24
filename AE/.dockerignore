@@ -1,0 +1,31 @@
+# Cadenza
+Cadenza-10.2.171-dist-win
+/cadenza-analytics-python
+Cadenza-10.2.171-dist-win.zip
+
+# Data Drift Extension
+/app
+
+# Jupyter notebooks
+/Notebooks
+conversion.ipynb
+data_drift.ipynb
+sampling_comparison.ipynb
+
+# Files
+README.md
+
+# Data
+/Data
+test.txt
+tost.txt
+nd.parquet
+rd.parquet
+insects.parquet
+fgc.csv
+insects.csv
+
+# Additional files
+.gitmodules
+
+
