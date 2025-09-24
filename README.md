@@ -33,7 +33,7 @@ If you do not want to run the analytics extension in a Docker container, you can
 
 ## Workflow
 The pipeline assumes a pretrained scikit-learn model which has been pushed to MLFlow. A user then receives new data with the same structure. The workflow then looks as follows:
-- Generate a MLFlow access token and paste it into the [token.txt](token.txt) file
+- Generate a MLFlow access token ([here](Notebooks/generate_token.ipynb)) and paste it into the [token.txt](token.txt) file
 - Import the token in a Cadenza Data Store
 - Use the [experiments extension](AE/analytics_extension/funcs/mlflow/experiments.py)
   - Input: access token

@@ -29,6 +29,9 @@ ENV FLASK_RUN_HOST=0.0.0.0
 # Flask configuration
 ENV FLASK_DEBUG=True
 
+# MLFLow configuration
+ENV MLFLOW_TRACKING_URI="https://mlflow.simplex4learning.de"
+
 # Run the application
 # CMD ["python", "-u", "run_extension.py"]
 
