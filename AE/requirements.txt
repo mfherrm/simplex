@@ -9,3 +9,5 @@ cadenzaanalytics
 requests
 numpy
 dotenv
+gunicorn
+gevent

@@ -19,8 +19,8 @@ from evidently import Report
 
 bp = Blueprint('main', __name__)
 
+# Set report directory and connection to itself
 REPORT_DIR = 'application_files/reports'
-
 WEBSERVICE_HOST = os.getenv('VISUALISATION_HOST'),
 urlpart = f"{WEBSERVICE_HOST}"
 
@@ -30,13 +30,14 @@ def data_drift():
     Receives two dataframes, computes a data drift report, saves it,
     and returns a success message.
     """
+    # Get data as bytes
     t0 = time.time()
     bytes = request.get_data(cache=True)
 
     t1 = time.time()
     print("Received data:", t1-t0)
 
-    # Hash the input data
+    # Hash the input data and build possible report url
     data_hash = hashlib.sha256(bytes).hexdigest()
     report_filename = f'{data_hash}.html'
     report_path = os.path.join(REPORT_DIR, report_filename)
@@ -47,6 +48,8 @@ def data_drift():
     # Check if a report with this hash already exists
     if os.path.exists(report_path):
         print(f"Report for hash {data_hash} found in cache. Serving existing file.")
+
+        # Return report if it exists
         report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
         t3 = time.time()
         print("Found report:", t3-t2)
@@ -70,22 +73,27 @@ def data_drift():
         ref_payload = data.get('reference_data')
         new_payload = data.get('current_data')
 
+        # Check if the data is empty
         if not ref_payload or not new_payload:
             return jsonify({"error": "Missing reference_data or current_data"}), 400
+        
+        # Build dataframes from new and reference data
         ref_df = pl.DataFrame(ref_payload['data'])
         new_df = pl.DataFrame(new_payload['data'])
 
         t5 = time.time()
         print("Unpacked payload:", t5-t4)
 
-         # Process New Data
+        # Process New Data
         new_df.columns = new_df.columns
         
+        # Move ID column to first
         try:
             new_id_col = new_payload['id_column'][0]
         except:
              new_id_col = None
 
+        # Assign datetime columns
         new_dt_cols = new_payload['datetime_columns']
 
         t6 = time.time()
@@ -94,6 +102,7 @@ def data_drift():
         # Process Reference Data
         ref_df.columns = ref_df.columns
 
+        # Move ID column to first
         try:
             ref_id_col = ref_payload['id_column'][0]
         except:
@@ -123,16 +132,19 @@ def data_drift():
         t9 = time.time()
         print("Mapped new columns:", t9-t8) 
 
+        # Create an evidently dataset for the new data
         new_dataset = Dataset.from_pandas(new_processed.to_pandas(), data_def_new)
 
         t10 = time.time()
         print("Created new dataset:", t10-t9) 
 
+        # Process data and create dataset templates
         ref_processed, data_def_ref = ef.map_to_def_pl(ref_df, ref_id_col, ref_dt_cols)
 
         t11 = time.time()
         print("Mapped reference columns:", t11-t10) 
 
+        # Create an evidently dataset for the reference data
         ref_dataset = Dataset.from_pandas(ref_processed.to_pandas(), data_def_ref)
 
         t12 = time.time()
@@ -148,6 +160,7 @@ def data_drift():
         # Save the report to a file
         reps.save_html(report_path)
 
+        # Build report URL
         report_url = f'http://{WEBSERVICE_HOST}/app/view_report/{report_filename}'
         t14 = time.time()
         print("Generated report URL:", t14-t13) 

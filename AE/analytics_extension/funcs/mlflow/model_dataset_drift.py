@@ -34,6 +34,7 @@ def get_column_names(attribute_groups: dict, group:str):
     Returns column names and column print names for specified group.
     """
     try:
+        # Select columns according to group
         columns = attribute_groups[group]
         return [c.name for c in columns], [c.print_name for c in columns]
     except:
@@ -59,6 +60,7 @@ def process_data(data: pl.DataFrame, common_columns, data_cols = None, data_prin
     # Select numeric columns
     numeric_df = data.select(cs.numeric())
 
+    # Change order if provided
     if any(desired_order):
             numeric_df = numeric_df[desired_order]
 
@@ -67,10 +69,12 @@ def process_data(data: pl.DataFrame, common_columns, data_cols = None, data_prin
         print("No numerical columns in the dataframe")
         return data.head(0)
     
+    # Reduce data to speed up report generation
+    # Cluster if provided
     if clustering:
         return get_clustering_samples(numeric_df, n_clusters = 5, fraction = fraction, seed=17)
     else:
-    # Sample to speed up report generation
+    # Use random sampling otherwise
         return numeric_df.sample(fraction = fraction, seed=17)
 
 def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15, seed = 17):
@@ -88,6 +92,7 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
         if actual_n_clusters != n_clusters:
             print(f"Adjusted number of clusters to {actual_n_clusters}")
 
+        # Scale data to make clustering more efficient
         scaler = StandardScaler().set_output(transform="polars")
         X_scaled = scaler.fit_transform(df)
 
@@ -103,11 +108,12 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
         df_copy = df_copy.with_columns(
             cluster = cluster
         )
-        # Sample from each cluster
+       
         print("Sampling from clusters...")
         result = pl.DataFrame()
+
+        # Sample from each cluster
         for cluster_id in range(actual_n_clusters):
-            
             cluster_data = df_copy.filter(df_copy['cluster'] == cluster_id)
             
             if not cluster_data.is_empty():
@@ -147,20 +153,16 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     t2 = time.time()
     print("Got new data column names:", t2-t1)
 
-    # Get Training data
-    
-    # columns = attribute_groups["run_id"]
-    # id_col = [c.name for c in columns]
-    # run_id = data[id_col]
-    # mlflow.get_run(run_id)
-
+    # Get run from run ID
     logged_run = mlflow.get_run(os.getenv('RUN_ID'))
 
     # Get artifact path via the dataset source logged with the dataset
     artifact_path = os.path.join(logged_run.info.artifact_uri, logged_run.inputs.dataset_inputs[0].dataset.source.split("artifacts/")[-1]).replace("\\","/")[:-2]
 
+    # Download the training dataset
     training_data = mlflow.artifacts.download_artifacts(artifact_path, dst_path = "./")
 
+    # Read the downloaded dataset
     ref_data = pl.read_parquet(training_data)
 
     os.remove(training_data) 
@@ -179,6 +181,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     new_data_cols = newdata_id_column_name + newdata_column_names + newdata_datetime_column_names
     new_data_print_cols = newdata_id_column_print_name + newdata_column_print_names + newdata_datetime_column_print_names
 
+    # Get columns that exist in both datasets
     common_columns = list(set(ref_data_print_cols).intersection(new_data_print_cols))
 
     print(newdata_column_print_names)
@@ -231,6 +234,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     # Send the request to the data drift calculation endpoint
 
     try:
+        # Send data to the data drift container
         response = requests.post(f"{URL_PART}/app/data_drift", data=orjson.dumps(payload, option=orjson.OPT_NAIVE_UTC | orjson.OPT_SERIALIZE_NUMPY), headers=headers)
         response.raise_for_status() 
     except requests.exceptions.RequestException as e:

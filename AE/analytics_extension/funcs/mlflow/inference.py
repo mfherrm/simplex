@@ -69,6 +69,7 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
 
     # prediction_frame = input_data
 
+    # Build prediction dataframe
     prediction_frame = pd.DataFrame({'ID':np.arange(0, len(predictions)), 'predictions':predictions})
     # prediction_frame["predictions"] = predictions
     # prediction_frame.insert(0, 'ID', prediction_frame.index)
@@ -77,8 +78,8 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
 
     # input_metadata = metadata.get_columns_by_attribute_group()['input_data']
 
+    # Build metadata
     id_metadata = metadata.get_columns_by_attribute_group()['net.disy.cadenza.keyAttributeGroup']
-    print(id_metadata)
 
     prediction_metadata = [ca.ColumnMetadata(
             name="predictions",
@@ -137,11 +138,13 @@ def get_predictions_cal(metadata: ca.RequestMetadata, data):
     # Delete model
     os.remove(model) 
 
+    # Build prediction dataframe
     prediction_frame = input_data
     prediction_frame["predictions"] = predictions
 
     print(prediction_frame)
 
+    # Build metadata
     input_metadata = metadata.get_columns_by_attribute_group()['input_data']
 
     prediction_metadata = [ca.ColumnMetadata(

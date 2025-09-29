@@ -18,20 +18,25 @@ def get_experiments(metadata: ca.RequestMetadata, data):
 
     attribute_groups = metadata.get_columns_by_attribute_group()
 
+    # Extract token
     token_group = attribute_groups["token"]
     token_col = [c.name for c in token_group]
     token = data[token_col]
 
+    # Set token as environment variable to pass the authenticator
     os.environ["MLFLOW_TRACKING_TOKEN"] = token.values[0][0]
 
+    # Get experiments
     experiments = mlflow.search_experiments()
 
     experiment_ids, experiment_names = [experiment.experiment_id for experiment in experiments], [experiment.name for experiment in experiments]
 
+    # Build experiment dataframe
     experiment_frame = pd.DataFrame({"experiment_id": experiment_ids, "experiment_name": experiment_names})
 
     print(experiment_frame)
 
+    # Build experiment metadata
     experiment_metadata = [
         ca.ColumnMetadata(
             name="experiment_id",

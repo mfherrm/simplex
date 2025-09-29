@@ -4,6 +4,9 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import time
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Data processing
 import polars as pl
@@ -34,10 +37,11 @@ def get_column_names(attribute_groups: dict, group:str):
     Returns column names and column print names for specified group.
     """
     try:
+        # Select columns according to group
         columns = attribute_groups[group]
         return [c.name for c in columns], [c.print_name for c in columns]
-    except:
-        print("Column type not given")
+    except Exception:
+        logger.warning("Column type not given")
         return [], []
 
 def process_data(data: pl.DataFrame, common_columns, data_cols = None, data_print_cols = None, desired_order = [], clustering = False, fraction = 0.15):
@@ -59,18 +63,21 @@ def process_data(data: pl.DataFrame, common_columns, data_cols = None, data_prin
     # Select numeric columns
     numeric_df = data.select(cs.numeric())
 
+    # Change order if provided
     if any(desired_order):
             numeric_df = numeric_df[desired_order]
 
     # Handle empty dataframe
     if any([dim==0 for dim in numeric_df.shape]):
-        print("No numerical columns in the dataframe")
+        logger.info("No numerical columns in the dataframe")
         return data.head(0)
     
+    # Reduce data to speed up report generation
+    # Cluster if provided
     if clustering:
         return get_clustering_samples(numeric_df, n_clusters = 5, fraction = fraction, seed=17)
     else:
-    # Sample to speed up report generation
+    # Use random sampling otherwise
         return numeric_df.sample(fraction = fraction, seed=17)
 
 def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15, seed = 17):
@@ -80,14 +87,15 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
     try:
         # Handle empty dataframe
         if any([dim==0 for dim in df.shape]):
-            print("No numerical columns in the dataframe")
+            logger.debug("No numerical columns in the dataframe")
             return df.head(0)
         
         # Adjust n_clusters if needed
         actual_n_clusters = min(n_clusters, df.shape[0] - 1)
         if actual_n_clusters != n_clusters:
-            print(f"Adjusted number of clusters to {actual_n_clusters}")
+            logger.debug(f"Adjusted number of clusters to {actual_n_clusters}")
 
+        # Scale data to make clustering more efficient
         scaler = StandardScaler().set_output(transform="polars")
         X_scaled = scaler.fit_transform(df)
 
@@ -103,11 +111,12 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
         df_copy = df_copy.with_columns(
             cluster = cluster
         )
-        # Sample from each cluster
-        print("Sampling from clusters...")
+        
+        logger.info("Sampling from clusters...")
         result = pl.DataFrame()
+
+        # Sample from each cluster
         for cluster_id in range(actual_n_clusters):
-            
             cluster_data = df_copy.filter(df_copy['cluster'] == cluster_id)
             
             if not cluster_data.is_empty():
@@ -117,8 +126,8 @@ def get_clustering_samples(df:pl.DataFrame, n_clusters: int = 5, fraction = 0.15
         return result.drop('cluster')
         
     except Exception as e:
-        print(f"Error in clustering: {e}")
-        print("Falling back to random sampling")
+        logger.error(f"Error in clustering: {e}")
+        logger.info("Falling back to random sampling")
         return df.sample(fraction=fraction, seed=seed)
 
 # -----------------------------------------------------------------------------------------------------
@@ -133,13 +142,13 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
 
     t0 = time.time()
     attribute_groups = metadata.get_columns_by_attribute_group()
-    print(attribute_groups)
+    logger.info(f"Attribute groups: {attribute_groups}")
     
     # Get newdata ID column name(s)
     newdata_id_column_name, newdata_id_column_print_name = get_column_names(attribute_groups, "newdata_id")
 
     t1 = time.time()
-    print("Got new data:", t1-t0)
+    logger.info(f"Got new data: {t1-t0} seconds")
 
     # Get newdata column names
     newdata_column_names, newdata_column_print_names = get_column_names(attribute_groups, "newdata")
@@ -148,9 +157,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     newdata_datetime_column_names, newdata_datetime_column_print_names = get_column_names(attribute_groups, "newdata_date")
 
     t2 = time.time()
-    print("Got new data column names:", t2-t1)
-
-    # Get Training data
+    logger.info(f"Got new data column names: {t2-t1} seconds")
 
     # Get Training data ID column name
     refdata_id_column_name, refdata_id_column_print_name = get_column_names(attribute_groups, "refdata_id")
@@ -168,6 +175,7 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
     ref_data_cols = refdata_id_column_name + refdata_column_names + refdata_datetime_column_names
     ref_data_print_cols = refdata_id_column_print_name + refdata_column_print_names + refdata_datetime_column_print_names
 
+    # Get columns that exist in both datasets
     common_columns = list(set(ref_data_print_cols).intersection(new_data_print_cols))
 
     # Fetch last report if there is an uneven number of columns
@@ -178,15 +186,15 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
         return ca.ErrorResponse(f"Error: No common columns between new data and reference data")
 
     try:
-        # Process training data 
+        # Process training data
         ref_data = process_data(pl.from_pandas(data[ref_data_cols]), common_columns, ref_data_cols, ref_data_print_cols,  clustering=clustering)
 
-        print("Finished processing the reference data")
+        logger.info("Finished processing the reference data")
         # Process new data
         new_data = process_data(pl.from_pandas(data[new_data_cols]), common_columns, new_data_cols, new_data_print_cols, desired_order = ref_data.columns, clustering=clustering)
         
         t3 = time.time()
-        print("Processed data:", t3-t2)
+        logger.info(f"Processed data: {t3-t2} seconds")
 
         # Prepare the data for the POST request
         payload = {
@@ -204,30 +212,31 @@ def calculate_data_drift(metadata: ca.RequestMetadata, data, clustering=False):
             }
         }
     except Exception as e:
-        print(f"Error processing data: {e}")
+        logger.error(f"Error processing data: {e}")
         return ca.ErrorResponse(f"Error processing data: {e}")
     
     headers = {'Content-Type': 'application/json'}
 
     t4 = time.time()
-    print("Constructed payload:", t4-t3)
+    logger.info(f"Constructed payload: {t4-t3} seconds")
 
     # Send the request to the data drift calculation endpoint
 
     try:
+        # Send data to the data drift container
         response = requests.post(f"{URL_PART}/app/data_drift", data=orjson.dumps(payload, option=orjson.OPT_NAIVE_UTC | orjson.OPT_SERIALIZE_NUMPY), headers=headers)
-        response.raise_for_status() 
+        response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        print(f"Error calling data drift service: {e}")
+        logger.error(f"Error calling data drift service: {e}")
         return ca.ErrorResponse(f"Error generating report: {e}")
     
     t5 = time.time()
-    print("Generated report:", t5-t4)
+    logger.info(f"Generated report: {t5-t4} seconds")
 
     response_data = response.json()
     # Return the URL to view the generated report
     report_url = response_data.get("report_url")
-    print(report_url.split(")"))
+    logger.debug(report_url.split(")"))
 
     # Return the URL to view the generated report
     report_url = f"{URL_PART}"+report_url.split(")")[1]

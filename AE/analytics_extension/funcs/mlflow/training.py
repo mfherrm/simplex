@@ -101,11 +101,13 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     training_data_new.to_parquet(file_path)
 
 
+    # Set predictor and predictand
     X = training_data_new.drop(target, axis=1)
 
     y = np.array(training_data_new[[target]].values, dtype=float)
 
     print("Splitting the dataset into training and test sets...")
+
     # Split the data into training and test sets
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.15, random_state=17
@@ -119,6 +121,7 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     y_test = pd.Series(y_test.reshape(-1), name="target")
 
     print("Defining the model hyperparameters...")
+
     # Define the model hyperparameters
     params = {
         "criterion": "squared_error",
@@ -126,14 +129,17 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     }
 
     print("Training the model...")
+
     # Train the model
     loaded_model.fit(X_train, y_train)
 
     print("Predicting on the test set...")
+
     # Predict on the test set
     y_pred = loaded_model.predict(X_test)
 
     print("Calculating metrics...")
+
     # Calculate metric
     mse = mean_squared_error(y_test, y_pred)
     rmse = root_mean_squared_error(y_test, y_pred)
@@ -142,8 +148,10 @@ def retrain_model(metadata: ca.RequestMetadata, data):
 
     print("Logging model parameters, metrics, and artifacts to MLFlow...")
 
+    # Set experiment the run is logged to
     mlflow.set_experiment(experiment_id=logged_run.info.experiment_id)
 
+    # Create a new run
     with mlflow.start_run() as run:
         print("Started run")
 
@@ -153,6 +161,8 @@ def retrain_model(metadata: ca.RequestMetadata, data):
                     "root mean squared error": rmse
                     }
         )
+
+        # Get conda env file
         conda_env_filePath =os.path.join(os.getcwd(), "AE", "conda_env.yml").replace("\\", "/")
 
         if not os.path.exists(conda_env_filePath):
@@ -177,8 +187,11 @@ def retrain_model(metadata: ca.RequestMetadata, data):
             name=model_name[0],
         )
 
+        # Create subfolder to log the training dataset to
         subfolder = "data_folder"
         print("subfolder")
+
+        # Log the training dataset as an artifcat
         mlflow.log_artifact(local_path=training_data_path,
                             artifact_path=subfolder,
                             )
@@ -190,14 +203,17 @@ def retrain_model(metadata: ca.RequestMetadata, data):
         print("\nRun name: ", run_name)
         print("Run id: ", run_id)
 
+        # Get the run itself
         logged_run = mlflow.get_run(run_id)
 
         artifact_url_parts = run.info.artifact_uri.split('/')
         experiment_num = artifact_url_parts[1]
         artifact_path = artifact_url_parts[2]
 
+        # Build the url where the training dataset is logged to
         dataset_source_url = os.path.join("https://mlflow.simplex4learning.de/#/experiments/", experiment_num, "runs", artifact_path, "artifacts", subfolder, file_path.split("/")[-1]).replace("\\","/")
 
+        # Associate the training dataset with a URL
         training_dataset = mlflow.data.from_pandas(training_data_new, source = dataset_source_url, name = "maximum water temperatures", targets = target)
         mlflow.log_input(training_dataset, context="training")
 
@@ -214,6 +230,7 @@ def retrain_model(metadata: ca.RequestMetadata, data):
     # Build response frame
     model_info_frame = pd.DataFrame({"run_id":run_id, "model_id":logged_run.to_dictionary()["outputs"]["model_outputs"][0].model_id}, index = [1])
     print(model_info_frame)
+    
     # Model id and associated run
     training_metadata = [ca.ColumnMetadata(
             name="run_id",
