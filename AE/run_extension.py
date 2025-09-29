@@ -199,7 +199,7 @@ model_inference_extension_enr = ca.CadenzaAnalyticsExtension(
     print_name="MLFlow model inference extension enrichment",
     extension_type=ca.ExtensionType.ENRICHMENT,
     attribute_groups=[inputs],
-    parameters=[run_id, mltoken]
+    parameters=[run_id]#, mltoken]
 )
 
 

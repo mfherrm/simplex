@@ -44,8 +44,12 @@ def get_predictions_enr(metadata: ca.RequestMetadata, data):
     input_data = data[input_cols]
 
     # Get token and set it as an environment variable
-    token= str(metadata.get_parameter("token"))
-    os.environ["MLFLOW_TRACKING_TOKEN"] = token
+    # This does not work with the OAuth token since it is longer than 255 characters
+    # token= str(metadata.get_parameter("token"))
+    # os.environ["MLFLOW_TRACKING_TOKEN"] = token
+
+    # Thus, it is set in the .env file / Dockerfile
+    os.environ["MLFLOW_TRACKING_TOKEN"] = os.getenv('MLFLOW_TRACKING_TOKEN')
 
     # Use the run ID provided to get the components of the model path 
     run_id = str(metadata.get_parameter("run_id"))
