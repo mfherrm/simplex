@@ -19,7 +19,8 @@ from analytics_extension.funcs.mlflow.model_runs import get_models_and_runs as m
 from analytics_extension.funcs.mlflow.experiments import get_experiments as model_experiments
 from analytics_extension.funcs.mlflow.inference import get_predictions_enr as model_inference_enr
 from analytics_extension.funcs.mlflow.inference import get_predictions_cal as model_inference_cal
-from analytics_extension.funcs.mlflow.training import retrain_model as model_training
+from analytics_extension.funcs.mlflow.training import train_model as model_training
+from analytics_extension.funcs.mlflow.training import retrain_model as model_retraining
 from analytics_extension.funcs.datadrift.dataset_drift import get_random_sampling_report as data_drift_rs
 from analytics_extension.funcs.datadrift.dataset_drift import get_random_clustering_report as data_drift_rc
 
@@ -246,6 +247,57 @@ model_inference_extension_cal = ca.CadenzaAnalyticsExtension(
 
 
 # -----------------------------------------------------------------------------------------------------
+# Train MLFlow model
+# -----------------------------------------------------------------------------------------------------
+
+# Predictors
+predictors = ca.AttributeGroup(
+    name="predictors",
+    print_name="Predictors",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+
+)
+
+# Predictand
+predictands = ca.AttributeGroup(
+    name="predictand",
+    print_name="Predictand",
+    data_types=[ca.DataType.STRING, ca.DataType.INT64, ca.DataType.FLOAT64],
+    min_attributes=1,
+    max_attributes=1,
+
+)
+
+# Experiment
+experiment = ca.Parameter(
+    name="experiment",
+    print_name="Experiment Name",
+    parameter_type=ca.DataType.STRING,
+    required=True
+    
+)
+
+# Token
+mltoken = ca.Parameter(
+    name="token",
+    print_name="MLFlow Access Token",
+    parameter_type=ca.DataType.STRING,
+    required=True
+
+)
+
+# Define extension
+model_training_extension = ca.CadenzaAnalyticsExtension(
+    relative_path="model-training-extension", 
+    analytics_function= model_training, 
+    print_name="MLFlow model training extension",
+    extension_type=ca.ExtensionType.CALCULATION,
+    attribute_groups=[predictors, predictands],
+    parameters=[experiment, mltoken]
+)
+
+# -----------------------------------------------------------------------------------------------------
 # Retrain MLFlow model
 # -----------------------------------------------------------------------------------------------------
 
@@ -277,14 +329,15 @@ mltoken = ca.Parameter(
 )
 
 # Define extension
-model_training_extension = ca.CadenzaAnalyticsExtension(
-    relative_path="model-training-extension", 
-    analytics_function= model_training, 
-    print_name="MLFlow model training extension",
+model_retraining_extension = ca.CadenzaAnalyticsExtension(
+    relative_path="model-retraining-extension", 
+    analytics_function= model_retraining, 
+    print_name="MLFlow model retraining extension",
     extension_type=ca.ExtensionType.CALCULATION,
     attribute_groups=[inputs],
     parameters=[run_id, mltoken]
 )
+
 
 
 # -----------------------------------------------------------------------------------------------------
@@ -427,6 +480,7 @@ analytics_service.add_analytics_extension(model_data_drift_extension_rc)
 analytics_service.add_analytics_extension(model_inference_extension_enr)
 analytics_service.add_analytics_extension(model_inference_extension_cal)
 analytics_service.add_analytics_extension(model_training_extension)
+analytics_service.add_analytics_extension(model_retraining_extension)
 analytics_service.add_analytics_extension(data_drift_extension_rs)
 analytics_service.add_analytics_extension(data_drift_extension_rc)
 
